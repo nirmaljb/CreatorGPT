@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+pydantic
+pydantic-settings
+yt-dlp
+faster-whisper
+groq
+qdrant-client[fastembed]
+fastembed
+langgraph
+psycopg[binary]
+sqlalchemy
