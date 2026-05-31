@@ -38,10 +38,20 @@ def startup() -> None:
 
 @app.get("/health")
 def health() -> dict:
+    postgres_ok = False
+    qdrant_ok = False
+    try:
+        postgres_ok = database.health_check()
+    except Exception:
+        logger.exception("Postgres health check failed")
+    try:
+        qdrant_ok = qdrant_health_check()
+    except Exception:
+        logger.exception("Qdrant health check failed")
     return {
         "api": True,
-        "postgres": database.health_check(),
-        "qdrant": qdrant_health_check(),
+        "postgres": postgres_ok,
+        "qdrant": qdrant_ok,
     }
 
 
@@ -79,8 +89,8 @@ def chat(payload: ChatRequest) -> StreamingResponse:
     row = get_session(payload.session_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    if row["status"] != "ready":
-        raise HTTPException(status_code=409, detail=f"Session is {row['status']}, not ready")
+    if row["status"] not in {"ready", "completed"}:
+        raise HTTPException(status_code=409, detail=f"Session is {row['status']}, not completed")
     return StreamingResponse(
         stream_rag_response(payload.session_id, payload.message),
         media_type="text/event-stream",

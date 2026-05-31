@@ -24,6 +24,8 @@ uvicorn backend.app.main:app --reload --reload-dir backend/app
 
 YouTube ingestion tries captions first and only falls back to audio download plus Whisper when captions are unavailable. Instagram uses the audio plus Whisper path.
 
+Extractor results are cached in Postgres by platform, URL, cache version, and `MAX_VIDEO_SECONDS` so repeated demos can reuse real metadata and transcripts. Set `FORCE_REFRESH=true` to bypass cache reads and force fresh extraction.
+
 ## Frontend
 
 ```bash
@@ -42,3 +44,4 @@ Set these in `.env` before running the backend:
 - `DATABASE_URL`
 - `QDRANT_URL`
 - `QDRANT_API_KEY`
+- `FORCE_REFRESH` optional, defaults to `false`

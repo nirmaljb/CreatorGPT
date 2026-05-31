@@ -23,6 +23,13 @@ type VideoMetadata = {
   upload_date: string | null;
   duration_seconds: number;
   engagement_rate: number;
+  ingest_status?: string;
+  video_error_message?: string | null;
+  transcript_source?: string;
+  chunk_count?: number;
+  metadata_cached?: boolean;
+  transcript_cached?: boolean;
+  has_raw_metadata?: boolean;
 };
 
 type Source = {
@@ -41,7 +48,7 @@ type ChatMessage = {
 
 type StatusResponse = {
   session_id: string;
-  status: "processing" | "ready" | "failed";
+  status: "processing" | "ready" | "completed" | "failed";
   error_message: string | null;
   current_step: string;
   progress_percent: number;
@@ -79,6 +86,13 @@ function VideoCard({ video }: { video?: VideoMetadata }) {
         <span className="video-label">Video {video.video_id}</span>
         <span className="platform">{video.platform}</span>
       </div>
+      <div className="pipeline-state">
+        <span className={`mini-status ${video.ingest_status || "queued"}`}>{video.ingest_status || "queued"}</span>
+        <span>{video.transcript_source || "unavailable"}</span>
+        <span>{video.chunk_count ?? 0} chunks</span>
+        {(video.metadata_cached || video.transcript_cached) && <span>cache</span>}
+      </div>
+      {video.video_error_message && <p className="video-error">{video.video_error_message}</p>}
       <h2>{video.creator || "unknown"}</h2>
       <dl className="metrics">
         <div>
@@ -128,6 +142,7 @@ export default function Home() {
 
   const videoA = useMemo(() => metadata.find((item) => item.video_id === "A"), [metadata]);
   const videoB = useMemo(() => metadata.find((item) => item.video_id === "B"), [metadata]);
+  const isReady = status === "ready" || status === "completed";
   const canIngest = videoInputs.every((video) => video.url.trim().length > 0) && status !== "processing";
 
   function updateVideoInput(videoId: "A" | "B", patch: Partial<VideoInputState>) {
@@ -217,7 +232,7 @@ export default function Home() {
 
   async function handleChat(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!sessionId || !chatInput.trim() || status !== "ready" || isStreaming) return;
+    if (!sessionId || !chatInput.trim() || !isReady || isStreaming) return;
 
     const question = chatInput.trim();
     const draftId = `draft-${Date.now()}`;
@@ -368,10 +383,10 @@ export default function Home() {
             <input
               value={chatInput}
               onChange={(event) => setChatInput(event.target.value)}
-              disabled={status !== "ready" || isStreaming}
-              placeholder={status === "ready" ? "Ask about the two videos..." : "Ingest must finish before chat"}
+              disabled={!isReady || isStreaming}
+              placeholder={isReady ? "Ask about the two videos..." : "Ingest must finish before chat"}
             />
-            <button type="submit" disabled={status !== "ready" || isStreaming || !chatInput.trim()}>
+            <button type="submit" disabled={!isReady || isStreaming || !chatInput.trim()}>
               Send
             </button>
           </form>

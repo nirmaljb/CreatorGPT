@@ -15,13 +15,14 @@ class CreatorSessionState(TypedDict, total=False):
     sources: list[dict]
 
 
-def _detect_video_id(query: str) -> str | None:
+def _detect_video_ids(query: str) -> set[str]:
     lowered = query.lower()
+    video_ids = set()
     if "video a" in lowered:
-        return "A"
+        video_ids.add("A")
     if "video b" in lowered:
-        return "B"
-    return None
+        video_ids.add("B")
+    return video_ids
 
 
 def _detect_hook_only(query: str) -> bool:
@@ -39,13 +40,30 @@ def retrieve_metadata(state: CreatorSessionState) -> CreatorSessionState:
 
 def retrieve_chunks(state: CreatorSessionState) -> CreatorSessionState:
     query = state["query"]
+    video_ids = _detect_video_ids(query)
+    hook_only = _detect_hook_only(query)
+    if len(video_ids) == 2:
+        chunks = []
+        for video_id in ("A", "B"):
+            chunks.extend(
+                retrieve(
+                    query=query,
+                    session_id=state["session_id"],
+                    video_id=video_id,
+                    hook_only=hook_only,
+                    top_k=4 if hook_only else 3,
+                )
+            )
+        return {"chunks": chunks}
+
+    video_id = next(iter(video_ids), None)
     return {
         "chunks": retrieve(
             query=query,
             session_id=state["session_id"],
-            video_id=_detect_video_id(query),
-            hook_only=_detect_hook_only(query),
-            top_k=8 if _detect_hook_only(query) else 6,
+            video_id=video_id,
+            hook_only=hook_only,
+            top_k=8 if hook_only else 6,
         )
     }
 

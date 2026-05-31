@@ -99,6 +99,7 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Ingestion runs as a FastAPI background task. Metadata is processed first for both videos, then per-video transcript/vector work runs concurrently. A production version should move this to a durable queue.
 - Backend startup validates Postgres and Qdrant by creating tables and ensuring the vector collection. This is fail-fast by design when `.env` is missing or cloud services are unavailable.
 - The chat path uses LangGraph for durable retrieval orchestration, then streams Groq tokens through a small provider wrapper so OpenAI can replace Groq later with minimal changes.
+- Compare questions that mention both Video A and Video B retrieve chunks from both videos; single-video questions stay filtered to that video.
 - The frontend uses `fetch` with a POST body and manually parses SSE because native `EventSource` does not support POST request bodies.
 - Frontend config pins `outputFileTracingRoot` to the frontend directory because this machine has another lockfile above the repo and Next.js otherwise infers the wrong root.
 - Downloaded audio files are temporary and are deleted after ingestion finishes or fails.
@@ -115,6 +116,12 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Qdrant payload indexes are created at startup for `session_id`, `video_id`, and `is_hook` because Qdrant Cloud requires indexed payload fields for filtered search.
 - Runtime audio uses `Settings.effective_tmp_dir`; legacy `TMP_DIR=tmp` is redirected to `/private/tmp/creator-rag` to avoid `uvicorn --reload` watching generated media files.
 - FastEmbed/Qdrant client and faster-whisper model initialization are lock-protected for threaded ingestion.
+- Ingestion is now organized behind platform-specific extractor classes. YouTube owns the captions-first path and Instagram owns the Whisper audio path.
+- Terminal ingest sessions use `completed` status. `/chat` still accepts older `ready` sessions for compatibility.
+- Video metadata rows store raw extractor metadata, per-video ingest status, failure messages, transcript source, chunk count, and cache flags.
+- Transcript source is recorded as `captions`, `whisper`, or `unavailable` in Postgres and chunk payloads.
+- Extraction cache is stored in Postgres by platform, URL, cache version, and `MAX_VIDEO_SECONDS` so repeated demos reuse real extractor output. `FORCE_REFRESH=true` bypasses cache reads and forces fresh extraction.
+- Ingestion must fail visibly for real extractor/download/transcription errors; do not silently fall back to fake metadata, fake transcripts, or fabricated chunks.
 
 ## Source Citation Format
 

@@ -71,7 +71,8 @@ h1 {
   min-width: min(360px, 100%);
 }
 
-.status.ready {
+.status.ready,
+.status.completed {
   background: var(--soft-green);
   color: var(--accent-strong);
 }
@@ -226,6 +227,42 @@ h2 {
   font-size: 22px;
   line-height: 1.2;
   margin: 12px 0 16px;
+}
+
+.pipeline-state {
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.pipeline-state span {
+  background: #eef1f5;
+  border-radius: 999px;
+  padding: 4px 7px;
+}
+
+.pipeline-state .mini-status.completed {
+  background: var(--soft-green);
+  color: var(--accent-strong);
+}
+
+.pipeline-state .mini-status.failed,
+.video-error {
+  color: var(--warn);
+}
+
+.video-error {
+  background: #fff2ed;
+  border: 1px solid #ffd8c8;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.35;
+  margin: 10px 0 0;
+  padding: 8px;
+  overflow-wrap: anywhere;
 }
 
 .metrics {

@@ -5,6 +5,8 @@ from urllib.parse import urlparse
 
 from yt_dlp import YoutubeDL
 
+from backend.app.ingest.cache import sanitize_json
+
 logger = logging.getLogger(__name__)
 
 
@@ -70,7 +72,7 @@ def _hashtags(info: dict) -> list[str]:
     return unique
 
 
-def scrape_metadata(url: str, session_id: str, video_id: str, expected_platform: str | None = None) -> dict:
+def extract_raw_metadata(url: str, session_id: str, video_id: str, expected_platform: str | None = None) -> dict:
     logger.info(
         "Scraping metadata for Video %s session_id=%s expected_platform=%s url=%s",
         video_id,
@@ -86,6 +88,25 @@ def scrape_metadata(url: str, session_id: str, video_id: str, expected_platform:
     }
     with YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=False)
+    logger.info(
+        "Raw metadata extracted for Video %s session_id=%s key_count=%s",
+        video_id,
+        session_id,
+        len(info.keys()) if isinstance(info, dict) else "unknown",
+    )
+    return sanitize_json(info)
+
+
+def normalize_metadata(
+    info: dict,
+    url: str,
+    session_id: str,
+    video_id: str,
+    expected_platform: str | None = None,
+) -> dict:
+    platform = _platform_from(url, info.get("extractor_key"))
+    if expected_platform and platform != expected_platform:
+        raise ValueError(f"Expected {expected_platform} URL for Video {video_id}, but extractor returned {platform}")
 
     views = _safe_int(info.get("view_count"))
     likes = _safe_int(info.get("like_count"))
@@ -105,7 +126,6 @@ def scrape_metadata(url: str, session_id: str, video_id: str, expected_platform:
         or info.get("follower_count")
     )
 
-    platform = _platform_from(url, info.get("extractor_key"))
     metadata = {
         "session_id": session_id,
         "video_id": video_id,
@@ -120,6 +140,13 @@ def scrape_metadata(url: str, session_id: str, video_id: str, expected_platform:
         "upload_date": _normalize_upload_date(info.get("upload_date")),
         "duration_seconds": _safe_float(info.get("duration")),
         "engagement_rate": engagement_rate,
+        "raw_metadata": info,
+        "ingest_status": "metadata_ready",
+        "video_error_message": None,
+        "transcript_source": "unavailable",
+        "chunk_count": 0,
+        "metadata_cached": False,
+        "transcript_cached": False,
     }
     logger.info(
         "Metadata parsed for Video %s session_id=%s platform=%s creator=%s views=%s likes=%s comments=%s duration=%.0fs engagement_rate=%.4f",
@@ -134,3 +161,8 @@ def scrape_metadata(url: str, session_id: str, video_id: str, expected_platform:
         engagement_rate,
     )
     return metadata
+
+
+def scrape_metadata(url: str, session_id: str, video_id: str, expected_platform: str | None = None) -> dict:
+    info = extract_raw_metadata(url, session_id, video_id, expected_platform)
+    return normalize_metadata(info, url, session_id, video_id, expected_platform)

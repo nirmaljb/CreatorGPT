@@ -1,4 +1,4 @@
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -41,6 +41,14 @@ class VideoMetadataModel(Base):
     upload_date: Mapped[str | None] = mapped_column(String(32), nullable=True)
     duration_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     engagement_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    raw_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    ingest_status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued")
+    video_error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    transcript_source: Mapped[str] = mapped_column(String(32), nullable=False, default="unavailable")
+    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cache_key: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    metadata_cached: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    transcript_cached: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = mapped_column(
         DateTime(timezone=True),
@@ -59,3 +67,23 @@ class ChatMessageModel(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     sources: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     created_at = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class ExtractionCacheModel(Base):
+    __tablename__ = "extraction_cache"
+
+    cache_key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    platform: Mapped[str] = mapped_column(String(32), nullable=False)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    normalized_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    transcript_words: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    transcript_source: Mapped[str] = mapped_column(String(32), nullable=False, default="unavailable")
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )

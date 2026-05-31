@@ -10,6 +10,7 @@ Phase 1 implementation.
 - Planning decisions recorded in `.codex/Agents.md`.
 - Backend and frontend Phase 1 implementation files have been added and lightweight checks pass.
 - Backend dev server is running at `http://127.0.0.1:8000`.
+- Fresh backend dev server with the latest ingestion changes is running at `http://127.0.0.1:8001`.
 - Frontend dev server is running at `http://localhost:3001` because port 3000 is already occupied locally.
 - Live ingest and chat smoke tests pass after the YouTube transcript fast-path and async ingestion changes.
 - Project docs have been moved under `.codex/`.
@@ -50,6 +51,13 @@ Phase 1 implementation.
 - Added scope-only docs for Phase 1 through Phase 4 under `docs/phase/`.
 - Updated `.codex/Agents.md` workflow so phase docs start with scope and gain technologies, flow, components, and tradeoffs as each phase progresses.
 - Updated `docs/phase/phase-1.md` so the user flow, ingest/status/chat flow, and component flow are represented as high-level Mermaid diagrams instead of ordered flow lists.
+- Confirmed a live mixed YouTube + Instagram Reel ingest returns `session_id` immediately, stores both metadata rows, reaches terminal status, and streams a cited chat response.
+- Added Postgres-backed extraction cache support keyed by platform, URL, cache version, and `MAX_VIDEO_SECONDS`, with `FORCE_REFRESH=true` to bypass cache reads.
+- Added platform-specific extractor classes for YouTube and Instagram so captions/Whisper behavior is explicit per platform.
+- Added per-video ingestion diagnostics in Postgres and status responses: `ingest_status`, `video_error_message`, `transcript_source`, `chunk_count`, cache flags, and raw-metadata presence.
+- Added raw `yt-dlp` metadata storage on video metadata rows and extraction cache entries.
+- Updated the terminal ingest session status to `completed` while keeping `/chat` compatible with older `ready` sessions.
+- Fixed compare-query retrieval so questions mentioning both Video A and Video B retrieve transcript chunks from both videos instead of filtering to Video A.
 
 ## Current Next Step
 
@@ -81,3 +89,12 @@ Use `.codex/PLANS.md` for the next large task, likely Phase 2 grounded intellige
 - The same live ingest upserted 38 chunks for Video A and 27 chunks for Video B to Qdrant.
 - Chat smoke test streamed an engagement-rate answer with `[Video A metadata]` and `[Video B metadata]` citations.
 - Documentation restructure verified by listing `.codex/` contents.
+- `backend/.venv/bin/python -m compileall backend/app backend/tests` passed after ingestion cache/extractor changes.
+- `backend/.venv/bin/python -m unittest discover backend/tests` passed for cache key/sessionization behavior and compare-query routing.
+- `npm run build` passed after adding per-video diagnostics and `completed` status support to the frontend.
+- Live mixed ingest on port 8001 with YouTube `https://youtu.be/cLpfcn_dPEo` and Instagram `https://instagram.com/reel/DEDbGqpyfkT/` returned `session_id=994ea123-443d-4dc9-80a0-2aac7e8627ae` immediately and reached `completed`.
+- That live mixed ingest stored raw metadata for both rows, used `captions` for Video A, used `whisper` for Video B, and upserted 27 Video A chunks plus 3 Video B chunks.
+- Chat smoke tests on the completed session streamed cited answers; a Video B query retrieved `[Video B, chunk 0]`, `[Video B, chunk 1]`, and `[Video B, chunk 2]`.
+- Repeat ingest `session_id=4920d31a-0ee2-4d00-8b5b-e61d3e7a470c` hit the extraction cache for both metadata and transcripts, then completed with cache flags set for both videos.
+- Negative ingest `session_id=67fb27f9-9c42-4733-8f47-5f0fc2a48b7b` with a bad Instagram URL failed visibly; `/status` reported Video B `ingest_status=failed`, `transcript_source=unavailable`, and the extractor error message.
+- After the compare-query routing fix, chat on cached session `4920d31a-0ee2-4d00-8b5b-e61d3e7a470c` returned source events containing both Video A and Video B transcript chunks.

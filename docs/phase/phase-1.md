@@ -10,6 +10,9 @@ Included in this phase:
 - Next.js frontend with two configurable video URL inputs, progress state, metadata cards, and chat.
 - Background ingestion that returns a `session_id` immediately.
 - Metadata extraction for two videos.
+- Platform-specific extractors for YouTube and Instagram.
+- Postgres extraction cache for repeatable demos, with `FORCE_REFRESH=true` to bypass cache reads.
+- Raw extractor metadata and per-video ingestion diagnostics in Postgres.
 - Engagement-rate calculation.
 - Transcript extraction using YouTube captions when available and Whisper fallback otherwise.
 - Transcript chunking, embedding, and Qdrant storage.
@@ -51,9 +54,9 @@ flowchart TD
     Ingest --> Session[Backend creates session_id]
     Session --> Poll[UI polls GET /status/session_id]
     Poll --> Cards[Metadata cards update as data arrives]
-    Cards --> Ready{Session ready?}
-    Ready -- No --> Poll
-    Ready -- Yes --> Chat[User asks a chat question]
+    Cards --> Completed{Session completed?}
+    Completed -- No --> Poll
+    Completed -- Yes --> Chat[User asks a chat question]
     Chat --> Stream[Backend streams cited answer]
     Stream --> UI
 ```
@@ -68,7 +71,7 @@ flowchart TD
     Validate --> Session[Create Postgres session: processing]
     Session --> Background[Start background ingestion]
 
-    Background --> Metadata[Metadata pass for both videos]
+    Background --> Metadata[Cache-aware metadata pass for both videos]
     Metadata --> StoreMeta[Upsert video_metadata in Postgres]
     StoreMeta --> Parallel[Run transcript/vector work concurrently]
 
@@ -94,7 +97,7 @@ flowchart TD
 
     EmbedA --> Qdrant[Upsert vectors to Qdrant]
     EmbedB --> Qdrant
-    Qdrant --> Ready[Mark session ready in Postgres]
+    Qdrant --> Done[Mark session completed in Postgres]
 ```
 
 ### Status Flow
@@ -108,7 +111,7 @@ flowchart TD
     UI --> Decision{processing?}
     Decision -- Yes --> Adaptive[Wait adaptive delay]
     Adaptive --> Status
-    Decision -- Ready --> EnableChat[Enable chat]
+    Decision -- Completed --> EnableChat[Enable chat]
     Decision -- Failed --> ShowError[Show failure state]
 ```
 
@@ -116,8 +119,8 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    UserQuestion[POST /chat] --> ReadyCheck{Session ready?}
-    ReadyCheck -- No --> Reject[Return not-ready error]
+    UserQuestion[POST /chat] --> ReadyCheck{Session completed?}
+    ReadyCheck -- No --> Reject[Return not-completed error]
     ReadyCheck -- Yes --> Graph[LangGraph retrieval flow]
 
     Graph --> History[(Postgres chat history)]
@@ -149,6 +152,8 @@ flowchart LR
     end
 
     subgraph Ingestion[Ingestion Layer]
+        Extractors[extractors.py: platform-specific extraction]
+        Cache[cache.py: extraction cache keys]
         Metadata[metadata.py: yt-dlp metadata]
         Captions[youtube_transcript.py: YouTube captions]
         Download[downloader.py: audio download/trim]
@@ -158,7 +163,7 @@ flowchart LR
     end
 
     subgraph Storage[Storage Layer]
-        Postgres[Postgres: sessions, metadata, chat]
+        Postgres[Postgres: sessions, metadata, cache, chat]
         Qdrant[Qdrant: transcript vectors]
     end
 
@@ -172,9 +177,11 @@ flowchart LR
     Page --> Main
     Main --> Schemas
     Main --> Pipeline
-    Pipeline --> Metadata
-    Pipeline --> Captions
-    Pipeline --> Download
+    Pipeline --> Cache
+    Pipeline --> Extractors
+    Extractors --> Metadata
+    Extractors --> Captions
+    Extractors --> Download
     Download --> Whisper
     Captions --> Chunker
     Whisper --> Chunker
@@ -196,6 +203,9 @@ flowchart LR
   - session status
   - progress
   - video metadata
+  - raw extractor metadata
+  - per-video ingest status, transcript source, failures, chunk counts, and cache flags
+  - extraction cache entries
   - chat history
 
 - Qdrant is the source of truth for:
@@ -246,6 +256,14 @@ flowchart LR
   - Greatly reduces two-video ingest time.
   - Requires thread-safe lazy initialization for shared clients/models.
 
+- Postgres extraction cache for demo repeatability:
+  - Reuses real prior extractor output for repeated demos.
+  - `FORCE_REFRESH=true` bypasses cache reads when current platform data is needed.
+
+- Per-video failure state:
+  - Makes Instagram/download/transcription failures visible in `/status`.
+  - The system does not fabricate fallback metadata or transcript chunks when extraction fails.
+
 - FastAPI background task over durable queue:
   - Simple enough for the assignment demo.
   - Production should use a real job queue for retries, cancellation, and worker isolation.
@@ -259,6 +277,9 @@ flowchart LR
 - Backend imports and compiles.
 - Frontend production build passes.
 - Health checks pass against Neon and Qdrant.
-- Live ingest for two YouTube videos completed in about 14 seconds using YouTube captions.
-- Qdrant stored chunks for both videos.
-- Chat streamed an engagement-rate answer with metadata citations.
+- Live mixed YouTube + Instagram Reel ingest completed on port 8001.
+- Video A used captions and stored 27 chunks; Video B used Whisper and stored 3 chunks.
+- Status responses expose raw-metadata presence, transcript source, chunk count, cache flags, and per-video failures.
+- Repeat ingest hit the extraction cache for both metadata and transcripts.
+- Bad Instagram URL smoke test failed visibly with Video B `ingest_status=failed`.
+- Chat streamed cited answers with transcript chunks from both videos for compare questions.

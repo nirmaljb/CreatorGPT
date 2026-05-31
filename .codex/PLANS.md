@@ -5,8 +5,8 @@
 ### Milestones
 
 - Define API contracts for ingest, status, messages, health, and chat.
-- Define Postgres schema for sessions, video metadata, and chat history.
-- Define provider interfaces for LLM, embeddings, vector storage, and transcript extraction.
+- Define Postgres schema for sessions, video metadata, extraction cache, and chat history.
+- Define provider interfaces for LLM, embeddings, vector storage, and platform-specific transcript extraction.
 - Add env validation and `.env.example`.
 - Create README skeleton, Progress.md, and demo script outline.
 - Select known-good YouTube and Instagram URLs.
@@ -25,6 +25,8 @@
 - Return `session_id` immediately from ingestion.
 - Run ingestion in the background.
 - Store sessions, video metadata, transcript chunks, and chat history.
+- Store raw metadata, transcript source, chunk counts, cache flags, and per-video failure state.
+- Cache real extraction results for repeatable demos, with a `FORCE_REFRESH=true` escape hatch.
 - Store vectors in Qdrant with `video_id` and `session_id` payload filters.
 - Build minimal Next.js UI with two URL inputs, progress state, and streaming chat.
 - Verify one full flow: ingest -> status complete -> chat -> cited answer.
@@ -32,8 +34,9 @@
 ### Acceptance Criteria
 
 - User can ingest two videos from the UI.
-- Status reaches `ready` or a readable `failed` state.
+- Status reaches `completed` or a readable `failed` state.
 - Metadata cards render for both videos when available.
+- Per-video status explains platform/caption/download/transcription failures.
 - Chat streams and cites metadata/chunks.
 - Full flow works against live Neon, Qdrant, and Groq credentials.
 

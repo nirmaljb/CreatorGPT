@@ -5,12 +5,23 @@ from pathlib import Path
 
 from yt_dlp.utils import DownloadError
 
+from backend.app.core.config import get_settings
+from backend.app.ingest.cache import (
+    extraction_cache_key,
+    failed_video_metadata,
+    metadata_for_cache,
+    metadata_from_cache,
+)
 from backend.app.ingest.chunker import chunk_transcript
-from backend.app.ingest.downloader import download_audio
-from backend.app.ingest.metadata import scrape_metadata
-from backend.app.ingest.transcriber import transcribe
-from backend.app.ingest.youtube_transcript import fetch_youtube_transcript
-from backend.app.store.postgres import update_session_progress, update_session_status, upsert_video_metadata
+from backend.app.ingest.extractors import TranscriptResult, get_platform_extractor
+from backend.app.store.postgres import (
+    get_extraction_cache,
+    update_session_progress,
+    update_session_status,
+    update_video_ingest_status,
+    upsert_extraction_cache,
+    upsert_video_metadata,
+)
 from backend.app.store.vector import get_embedder, upsert_chunks
 
 logger = logging.getLogger(__name__)
@@ -43,47 +54,138 @@ def ingest_session(session_id: str, videos: list[dict]) -> None:
     asyncio.run(ingest_session_async(session_id, videos))
 
 
-async def get_transcript_words(
+def _cache_has_transcript(cache_entry: dict | None) -> bool:
+    return cache_entry is not None and cache_entry.get("transcript_words") is not None
+
+
+async def load_or_extract_metadata(
+    session_id: str,
     video: dict,
-    metadata: dict,
-    progress: SessionProgress,
-) -> tuple[list[dict], str, str | None]:
+) -> tuple[dict, dict | None]:
+    settings = get_settings()
     video_id = video["video_id"]
     url = video["url"]
-    platform = (metadata.get("platform") or video.get("platform") or "").lower()
+    platform = video["platform"]
+    cache_key = extraction_cache_key(platform, url)
+    extractor = get_platform_extractor(platform)
 
-    if platform == "youtube":
-        await progress.set_video(video_id, f"Fetching YouTube captions for Video {video_id}", 8)
-        caption_words = await asyncio.to_thread(fetch_youtube_transcript, url, metadata["session_id"], video_id)
-        if caption_words:
-            await progress.set_video(video_id, f"Using YouTube captions for Video {video_id}", 55)
-            return caption_words, "youtube_captions", None
+    cache_entry: dict | None = None
+    if settings.force_refresh:
+        logger.info(
+            "FORCE_REFRESH enabled; bypassing extraction cache for Video %s session_id=%s platform=%s url=%s",
+            video_id,
+            session_id,
+            platform,
+            url,
+        )
+    else:
+        cache_entry = await asyncio.to_thread(get_extraction_cache, cache_key)
+        if cache_entry and cache_entry.get("normalized_metadata"):
+            transcript_cached = _cache_has_transcript(cache_entry)
+            logger.info(
+                "Extraction cache hit for metadata Video %s session_id=%s platform=%s transcript_cached=%s cache_key=%s",
+                video_id,
+                session_id,
+                platform,
+                transcript_cached,
+                cache_key,
+            )
+            metadata = metadata_from_cache(
+                cache_entry["normalized_metadata"],
+                session_id=session_id,
+                video_id=video_id,
+                url=url,
+                cache_key=cache_key,
+                raw_metadata=cache_entry.get("raw_metadata"),
+                transcript_source=cache_entry.get("transcript_source") or "unavailable",
+                transcript_cached=transcript_cached,
+            )
+            return metadata, cache_entry
 
         logger.info(
-            "Falling back to Whisper for Video %s session_id=%s after YouTube transcript miss",
+            "Extraction cache miss for metadata Video %s session_id=%s platform=%s cache_key=%s",
+            video_id,
+            session_id,
+            platform,
+            cache_key,
+        )
+
+    metadata = await asyncio.to_thread(extractor.extract_metadata, url, session_id, video_id)
+    metadata["cache_key"] = cache_key
+    await asyncio.to_thread(
+        upsert_extraction_cache,
+        cache_key,
+        platform,
+        url,
+        metadata.get("raw_metadata"),
+        metadata_for_cache(metadata),
+        None,
+        "unavailable",
+    )
+    logger.info(
+        "Extraction cache stored metadata for Video %s session_id=%s platform=%s cache_key=%s",
+        video_id,
+        session_id,
+        platform,
+        cache_key,
+    )
+    return metadata, cache_entry
+
+
+async def load_or_extract_transcript(
+    video: dict,
+    metadata: dict,
+    cache_entry: dict | None,
+    progress: SessionProgress,
+) -> TranscriptResult:
+    settings = get_settings()
+    video_id = video["video_id"]
+    platform = video["platform"]
+    cache_key = metadata["cache_key"]
+
+    if not settings.force_refresh and _cache_has_transcript(cache_entry):
+        words = cache_entry.get("transcript_words") or []
+        source = cache_entry.get("transcript_source") or "unavailable"
+        await progress.set_video(video_id, f"Using cached transcript for Video {video_id}", 60)
+        logger.info(
+            "Extraction cache hit for transcript Video %s session_id=%s source=%s word_count=%s cache_key=%s",
             video_id,
             metadata["session_id"],
+            source,
+            len(words),
+            cache_key,
         )
-        await progress.set_video(video_id, f"Captions unavailable; downloading audio for Video {video_id}", 12)
-    else:
-        await progress.set_video(video_id, f"Downloading audio for Video {video_id}", 12)
+        return TranscriptResult(words=words, source=source)
 
-    audio_path = await asyncio.to_thread(
-        download_audio,
-        url,
-        metadata["session_id"],
-        video_id,
-        metadata["duration_seconds"],
+    extractor = get_platform_extractor(platform)
+    result = await extractor.extract_transcript(video, metadata, progress)
+    await asyncio.to_thread(
+        upsert_extraction_cache,
+        cache_key,
+        platform,
+        video["url"],
+        metadata.get("raw_metadata"),
+        metadata_for_cache(metadata),
+        result.words,
+        result.source,
+        None,
+        True,
     )
-
-    await progress.set_video(video_id, f"Transcribing Video {video_id} with Whisper", 45)
-    words = await asyncio.to_thread(transcribe, audio_path)
-    return words, "whisper", audio_path
+    logger.info(
+        "Extraction cache stored transcript for Video %s session_id=%s source=%s word_count=%s cache_key=%s",
+        video_id,
+        metadata["session_id"],
+        result.source,
+        len(result.words),
+        cache_key,
+    )
+    return result
 
 
 async def process_video_transcript(
     video: dict,
     metadata: dict,
+    cache_entry: dict | None,
     progress: SessionProgress,
 ) -> str | None:
     video_id = video["video_id"]
@@ -99,8 +201,23 @@ async def process_video_transcript(
     )
 
     try:
-        words, transcript_source, audio_path = await get_transcript_words(video, metadata, progress)
+        await asyncio.to_thread(update_video_ingest_status, metadata["session_id"], video_id, "transcribing")
+        result = await load_or_extract_transcript(video, metadata, cache_entry, progress)
+        words = result.words
+        transcript_source = result.source
+        audio_path = result.audio_path
         metadata["transcript_source"] = transcript_source
+        transcript_cached = not get_settings().force_refresh and _cache_has_transcript(cache_entry)
+        await asyncio.to_thread(
+            update_video_ingest_status,
+            metadata["session_id"],
+            video_id,
+            "chunking",
+            None,
+            transcript_source,
+            None,
+            transcript_cached,
+        )
 
         await progress.set_video(video_id, f"Chunking transcript for Video {video_id}", 70)
         chunks = chunk_transcript(words, metadata)
@@ -115,6 +232,16 @@ async def process_video_transcript(
 
         await progress.set_video(video_id, f"Embedding chunks for Video {video_id}", 85)
         upserted = await asyncio.to_thread(upsert_chunks, chunks)
+        await asyncio.to_thread(
+            update_video_ingest_status,
+            metadata["session_id"],
+            video_id,
+            "completed",
+            None,
+            transcript_source,
+            upserted,
+            transcript_cached,
+        )
 
         await progress.set_video(video_id, f"Finished Video {video_id}", 100)
         logger.info(
@@ -126,11 +253,19 @@ async def process_video_transcript(
             time.monotonic() - video_started_at,
         )
         return audio_path
-    except Exception:
+    except Exception as exc:
         logger.exception(
             "Transcript/vector pass failed for Video %s session_id=%s",
             video_id,
             metadata["session_id"],
+        )
+        await asyncio.to_thread(
+            update_video_ingest_status,
+            metadata["session_id"],
+            video_id,
+            "failed",
+            str(exc),
+            "unavailable",
         )
         if audio_path:
             try:
@@ -160,10 +295,13 @@ async def ingest_session_async(session_id: str, videos: list[dict]) -> None:
         )
 
         metadata_by_video: dict[str, dict] = {}
+        cache_by_video: dict[str, dict | None] = {}
+        metadata_errors: list[str] = []
         for index, video in enumerate(videos):
             video_id = video["video_id"]
             url = video["url"]
             platform = video.get("platform")
+            cache_key = extraction_cache_key(platform, url)
             await asyncio.to_thread(
                 update_session_progress,
                 session_id,
@@ -177,16 +315,45 @@ async def ingest_session_async(session_id: str, videos: list[dict]) -> None:
                 platform,
                 url,
             )
-            metadata = await asyncio.to_thread(
-                scrape_metadata,
-                url,
-                session_id,
-                video_id,
-                platform,
-            )
-            await asyncio.to_thread(upsert_video_metadata, metadata)
-            metadata_by_video[video_id] = metadata
-            logger.info("Stored metadata for Video %s session_id=%s", video_id, session_id)
+            try:
+                metadata, cache_entry = await load_or_extract_metadata(session_id, video)
+                await asyncio.to_thread(upsert_video_metadata, metadata)
+                await asyncio.to_thread(
+                    update_video_ingest_status,
+                    session_id,
+                    video_id,
+                    "metadata_ready",
+                    None,
+                    metadata.get("transcript_source", "unavailable"),
+                    0,
+                    metadata.get("transcript_cached", False),
+                )
+                metadata_by_video[video_id] = metadata
+                cache_by_video[video_id] = cache_entry
+                logger.info(
+                    "Stored metadata for Video %s session_id=%s metadata_cached=%s raw_metadata=%s",
+                    video_id,
+                    session_id,
+                    metadata.get("metadata_cached", False),
+                    bool(metadata.get("raw_metadata")),
+                )
+            except Exception as exc:
+                logger.exception("Metadata extraction failed for Video %s session_id=%s", video_id, session_id)
+                await asyncio.to_thread(
+                    upsert_video_metadata,
+                    failed_video_metadata(
+                        session_id=session_id,
+                        video_id=video_id,
+                        platform=platform,
+                        url=url,
+                        cache_key=cache_key,
+                        error_message=str(exc),
+                    ),
+                )
+                metadata_errors.append(f"Video {video_id}: {exc}")
+
+        if metadata_errors:
+            raise RuntimeError("; ".join(metadata_errors))
 
         await asyncio.to_thread(update_session_progress, session_id, "Metadata ready for both videos", 25)
         logger.info("Metadata pass complete session_id=%s videos=%s", session_id, sorted(metadata_by_video))
@@ -198,6 +365,7 @@ async def ingest_session_async(session_id: str, videos: list[dict]) -> None:
                 process_video_transcript(
                     video,
                     metadata_by_video[video["video_id"]],
+                    cache_by_video.get(video["video_id"]),
                     progress,
                 )
                 for video in videos
@@ -214,8 +382,8 @@ async def ingest_session_async(session_id: str, videos: list[dict]) -> None:
         if first_error:
             raise first_error
 
-        await asyncio.to_thread(update_session_status, session_id, "ready", None, "Ready", 100)
-        logger.info("Ingestion ready session_id=%s elapsed=%.2fs", session_id, time.monotonic() - started_at)
+        await asyncio.to_thread(update_session_status, session_id, "completed", None, "Completed", 100)
+        logger.info("Ingestion completed session_id=%s elapsed=%.2fs", session_id, time.monotonic() - started_at)
     except DownloadError as exc:
         logger.exception("Video download/extraction failed session_id=%s", session_id)
         await asyncio.to_thread(

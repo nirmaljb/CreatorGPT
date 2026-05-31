@@ -19,7 +19,7 @@ Creators need quick, evidence-backed explanations for performance differences. T
 2. User enters two video URLs and selects each platform.
 3. Backend returns a `session_id` immediately.
 4. UI shows metadata and progress while ingestion runs.
-5. User asks questions once ingestion is ready.
+5. User asks questions once ingestion is completed.
 6. Assistant streams grounded answers with metadata and transcript citations.
 
 ## Must-Have Assignment Capabilities
@@ -29,6 +29,9 @@ Creators need quick, evidence-backed explanations for performance differences. T
 - Extract metadata: views, likes, comments, creator, follower count, hashtags, upload date, duration.
 - Compute engagement rate: `(likes + comments) / views * 100`.
 - Extract transcript dynamically through YouTube captions or Whisper fallback.
+- Record transcript source as `captions`, `whisper`, or `unavailable`.
+- Store raw extractor metadata and per-video extraction failures.
+- Cache real extraction results for repeatable demos, with `FORCE_REFRESH=true` for fresh extraction.
 - Chunk and embed transcripts into Qdrant with `session_id` and `video_id` payloads.
 - Maintain persisted session and chat history in Postgres.
 - Stream responses.
@@ -36,7 +39,7 @@ Creators need quick, evidence-backed explanations for performance differences. T
 
 ## Success Criteria
 
-- A clean demo can complete: ingest -> ready status -> chat -> cited answer.
+- A clean demo can complete: ingest -> completed status -> chat -> cited answer.
 - Metadata questions are answered from Postgres.
 - Semantic transcript questions are answered from Qdrant chunks.
 - Long YouTube videos avoid slow Whisper when captions are available.

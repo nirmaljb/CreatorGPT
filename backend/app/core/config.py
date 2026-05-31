@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     max_video_seconds: int = Field(default=600, alias="MAX_VIDEO_SECONDS")
     whisper_model_size: str = Field(default="base", alias="WHISPER_MODEL_SIZE")
     tmp_dir: str = Field(default="/private/tmp/creator-rag", alias="TMP_DIR")
+    force_refresh: bool = Field(default=False, alias="FORCE_REFRESH")
 
     cors_origins: str = Field(default="http://localhost:3000", alias="CORS_ORIGINS")
 
