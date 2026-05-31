@@ -61,7 +61,7 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Groq `llama-3.3-70b-versatile` for streaming chat during testing.
 - FastEmbed `BAAI/bge-small-en-v1.5` for embeddings during testing.
 - `yt-dlp` for metadata and audio download.
-- `faster-whisper` for transcription with word timestamps.
+- Groq `whisper-large-v3` for hosted Whisper transcription with word timestamps.
 - `youtube-transcript-api` for YouTube caption fast-path before Whisper fallback.
 - Minimal UI with two video cards and a chat panel.
 
@@ -82,7 +82,7 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 
 ## Decisions And Tradeoffs
 
-- Backend is FastAPI because Python has the cleanest path for `yt-dlp`, `faster-whisper`, LangGraph, Qdrant, and batch ingestion.
+- Backend is FastAPI because Python has the cleanest path for `yt-dlp`, Groq audio transcription, LangGraph, Qdrant, and batch ingestion.
 - Frontend is Next.js because it is required by the assignment stack and is fast to ship for a demo.
 - Phase 1 uses Groq chat instead of OpenAI chat to keep inference fast and low-cost during testing.
 - Phase 1 uses `llama-3.3-70b-versatile` on Groq as the chat model because it gives strong reasoning quality with high streaming throughput.
@@ -112,17 +112,17 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Qdrant startup now validates existing collection dimensions against `EMBEDDING_DIMENSIONS` so provider/model swaps fail with a clear error instead of during upsert.
 - Development CORS allows local frontend ports 3000 and 3001 because Next.js may move to 3001 when 3000 is already occupied.
 - Session status includes persisted progress fields: `current_step` and `progress_percent`. The frontend uses them to show ingestion progress and to poll adaptively instead of using a fixed short interval.
-- YouTube ingestion first tries `youtube-transcript-api` captions and normalizes captions into the same `{text, start, end}` shape as Whisper output. If captions are unavailable or the caption API fails, ingestion falls back to `yt-dlp + faster-whisper`.
+- YouTube ingestion first tries `youtube-transcript-api` captions and normalizes captions into the same `{text, start, end}` shape as Whisper output. If captions are unavailable or the caption API fails, ingestion falls back to `yt-dlp` audio extraction plus Groq `whisper-large-v3`.
 - YouTube caption transcripts are not capped by `MAX_VIDEO_SECONDS`; long YouTube videos can ingest through captions without Whisper. `MAX_VIDEO_SECONDS` only limits audio download/Whisper fallback.
 - Per-video transcript/vector work now runs concurrently with `asyncio.gather` after both metadata rows are stored. Blocking operations run through `asyncio.to_thread`.
 - Qdrant payload indexes are created at startup for `session_id`, `video_id`, and `is_hook` because Qdrant Cloud requires indexed payload fields for filtered search.
 - Runtime audio uses `Settings.effective_tmp_dir`; legacy `TMP_DIR=tmp` is redirected to `/private/tmp/creator-rag` to avoid `uvicorn --reload` watching generated media files.
-- FastEmbed/Qdrant client and faster-whisper model initialization are lock-protected for threaded ingestion.
+- FastEmbed/Qdrant client initialization is lock-protected for threaded ingestion.
 - Ingestion is now organized behind platform-specific extractor classes. YouTube owns the captions-first path and Instagram owns the Whisper audio path.
 - Terminal ingest sessions use `completed` status. `/chat` still accepts older `ready` sessions for compatibility.
 - Video metadata rows store raw extractor metadata, per-video ingest status, failure messages, transcript source, chunk count, and cache flags.
 - Transcript source is recorded as `captions`, `whisper`, or `unavailable` in Postgres and chunk payloads.
-- Extraction cache is stored in Postgres by platform, URL, cache version, and `MAX_VIDEO_SECONDS` so repeated demos reuse real extractor output. Cache version `extract-v2` avoids reusing older caption entries that were capped to `MAX_VIDEO_SECONDS`. `FORCE_REFRESH=true` bypasses cache reads and forces fresh extraction.
+- Extraction cache is stored in Postgres by platform, URL, cache version, and `MAX_VIDEO_SECONDS` so repeated demos reuse real extractor output. Cache version `extract-v3` avoids reusing older capped-caption or local-Whisper entries. `FORCE_REFRESH=true` bypasses cache reads and forces fresh extraction.
 - Ingestion must fail visibly for real extractor/download/transcription errors; do not silently fall back to fake metadata, fake transcripts, or fabricated chunks.
 
 ## Source Citation Format

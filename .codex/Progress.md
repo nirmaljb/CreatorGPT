@@ -61,7 +61,9 @@ Phase 1 implementation.
 - Added typed Postgres metadata tools for video metrics, creator info, engagement comparison, and session video summaries.
 - Added question routing so numeric/creator/metadata questions bypass Qdrant retrieval, semantic transcript questions retrieve from Qdrant, and mixed comparison questions use both metadata tools and Qdrant.
 - Changed YouTube caption ingestion so captions are uncapped by `MAX_VIDEO_SECONDS`; videos longer than 10 minutes can ingest when captions are available, while audio/Whisper fallback remains capped.
-- Bumped extraction cache version to `extract-v2` so older capped-caption cache entries are not reused.
+- Bumped extraction cache version for transcript provider changes so older capped-caption cache entries are not reused.
+- Replaced local `faster-whisper` transcription with Groq `whisper-large-v3` transcription and removed the local dependency/config.
+- Bumped extraction cache version to `extract-v3` so older local-Whisper transcript cache entries are not reused.
 
 ## Current Next Step
 
@@ -98,6 +100,9 @@ Use `.codex/PLANS.md` for the next large task, likely Phase 2 grounded intellige
 - `backend/.venv/bin/python -m unittest discover backend/tests` passed after metadata-tool routing was added; tests assert numeric metadata questions do not call Qdrant retrieval.
 - `backend/.venv/bin/python -m unittest discover backend/tests` passed after uncapping YouTube captions; tests assert caption words beyond 10 minutes are kept and long captioned YouTube videos do not use Whisper.
 - `backend/.venv/bin/python -m compileall backend/app backend/tests` and `git diff --check` passed after the long-caption change.
+- `backend/.venv/bin/python -m unittest discover backend/tests` passed after replacing local transcription with Groq `whisper-large-v3`; tests assert the Groq transcription call requests `verbose_json` word timestamps.
+- `backend/.venv/bin/python -c "import backend.app.main; import backend.app.ingest.transcriber"` passed after removing the local `faster-whisper` dependency.
+- `backend/.venv/bin/pip uninstall -y faster-whisper` removed the local transcription package from the current virtualenv; `pip show faster-whisper` confirms it is no longer installed.
 - `npm run build` passed after adding per-video diagnostics and `completed` status support to the frontend.
 - Live mixed ingest on port 8001 with YouTube `https://youtu.be/cLpfcn_dPEo` and Instagram `https://instagram.com/reel/DEDbGqpyfkT/` returned `session_id=994ea123-443d-4dc9-80a0-2aac7e8627ae` immediately and reached `completed`.
 - That live mixed ingest stored raw metadata for both rows, used `captions` for Video A, used `whisper` for Video B, and upserted 27 Video A chunks plus 3 Video B chunks.

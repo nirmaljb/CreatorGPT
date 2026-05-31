@@ -28,7 +28,7 @@ Creators need quick, evidence-backed explanations for performance differences. T
 - Support YouTube and Instagram inputs.
 - Extract metadata: views, likes, comments, creator, follower count, hashtags, upload date, duration.
 - Compute engagement rate: `(likes + comments) / views * 100`.
-- Extract transcript dynamically through YouTube captions or Whisper fallback.
+- Extract transcript dynamically through YouTube captions or Groq `whisper-large-v3` fallback.
 - Record transcript source as `captions`, `whisper`, or `unavailable`.
 - Store raw extractor metadata and per-video extraction failures.
 - Cache real extraction results for repeatable demos, with `FORCE_REFRESH=true` for fresh extraction.

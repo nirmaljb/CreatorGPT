@@ -9,7 +9,7 @@
 - Embeddings: FastEmbed `BAAI/bge-small-en-v1.5`.
 - Vector DB: Qdrant Cloud.
 - Relational DB: Neon Postgres.
-- Extraction: `yt-dlp`, `youtube-transcript-api`, `faster-whisper`.
+- Extraction: `yt-dlp`, `youtube-transcript-api`, Groq `whisper-large-v3`.
 
 ## Runtime Flow
 
@@ -18,8 +18,8 @@
 3. Metadata for both videos is loaded from the extraction cache or scraped through the platform extractor, then stored first.
 4. Per-video transcript/vector work runs concurrently.
 5. YouTube tries uncapped captions first, so videos longer than `MAX_VIDEO_SECONDS` can ingest when captions are available.
-6. Unavailable YouTube captions fall back to audio download plus Whisper, where audio is trimmed to `MAX_VIDEO_SECONDS`.
-7. Instagram uses audio download plus Whisper.
+6. Unavailable YouTube captions fall back to audio download plus Groq `whisper-large-v3`, where audio is trimmed to `MAX_VIDEO_SECONDS`.
+7. Instagram uses audio download plus Groq `whisper-large-v3`.
 8. Real extractor output is cached in Postgres unless `FORCE_REFRESH=true` bypasses cache reads for the run.
 9. Transcript chunks are embedded and stored in Qdrant with payload filters.
 10. Completed sessions move to `completed`; failed videos include per-video error details in status responses.
@@ -131,6 +131,6 @@ No auth in Phase 1. This is a single-user assignment demo. Production would add 
 
 - Backend needs `GROQ_API_KEY`, `DATABASE_URL`, `QDRANT_URL`, and `QDRANT_API_KEY`.
 - `FORCE_REFRESH=true` bypasses extraction-cache reads when a demo needs fresh platform data.
-- `ffmpeg` is required for Whisper fallback.
+- `ffmpeg` is required for `yt-dlp` audio extraction before Groq Whisper transcription.
 - Runtime audio is written outside the repo by default to avoid reload loops.
 - For dev reload, use `uvicorn backend.app.main:app --reload --reload-dir backend/app`.

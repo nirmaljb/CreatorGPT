@@ -53,7 +53,7 @@ class YouTubeLongCaptionsTests(unittest.TestCase):
 
         with (
             patch("backend.app.ingest.extractors.fetch_youtube_transcript", return_value=caption_words),
-            patch.object(YouTubeExtractor, "whisper_transcript", new_callable=AsyncMock) as whisper,
+            patch.object(YouTubeExtractor, "groq_whisper_transcript", new_callable=AsyncMock) as whisper,
         ):
             result = asyncio.run(YouTubeExtractor().extract_transcript(video, metadata, ProgressRecorder()))
 

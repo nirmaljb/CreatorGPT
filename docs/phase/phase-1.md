@@ -14,7 +14,7 @@ Included in this phase:
 - Postgres extraction cache for repeatable demos, with `FORCE_REFRESH=true` to bypass cache reads.
 - Raw extractor metadata and per-video ingestion diagnostics in Postgres.
 - Engagement-rate calculation.
-- Transcript extraction using YouTube captions when available and Whisper fallback otherwise.
+- Transcript extraction using YouTube captions when available and Groq `whisper-large-v3` fallback otherwise.
 - Transcript chunking, embedding, and Qdrant storage.
 - Durable session, metadata, and chat history storage in Neon Postgres.
 - LangGraph retrieval path that loads metadata from Postgres and transcript chunks from Qdrant.
@@ -43,7 +43,7 @@ Out of scope for this phase:
 - Relational DB: Neon Postgres.
 - Metadata/audio extraction: `yt-dlp`.
 - YouTube captions: `youtube-transcript-api`.
-- Whisper fallback: `faster-whisper`.
+- Whisper fallback: Groq `whisper-large-v3`.
 - Runtime media support: `ffmpeg`.
 
 ## User Flow At This Point
@@ -84,10 +84,10 @@ flowchart TD
     VideoB --> TranscriptB{YouTube captions available?}
 
     TranscriptA -- Yes --> CaptionsA[Normalize captions to timestamped words]
-    TranscriptA -- No or Instagram --> WhisperA[Download/trim audio and transcribe with Whisper]
+    TranscriptA -- No or Instagram --> WhisperA[Download/trim audio and transcribe with Groq Whisper]
 
     TranscriptB -- Yes --> CaptionsB[Normalize captions to timestamped words]
-    TranscriptB -- No or Instagram --> WhisperB[Download/trim audio and transcribe with Whisper]
+    TranscriptB -- No or Instagram --> WhisperB[Download/trim audio and transcribe with Groq Whisper]
 
     CaptionsA --> ChunkA[Chunk transcript]
     WhisperA --> ChunkA
@@ -161,7 +161,7 @@ flowchart LR
         Metadata[metadata.py: yt-dlp metadata]
         Captions[youtube_transcript.py: YouTube captions]
         Download[downloader.py: audio download/trim]
-        Whisper[transcriber.py: Whisper fallback]
+        Whisper[transcriber.py: Groq Whisper fallback]
         Chunker[chunker.py: transcript chunks]
         Pipeline[pipeline.py: orchestration and progress]
     end
@@ -226,7 +226,7 @@ flowchart LR
 ## Decision Tradeoffs
 
 - FastAPI over Node backend:
-  - Better local support for `yt-dlp`, `faster-whisper`, FastEmbed, and LangGraph.
+  - Better local support for `yt-dlp`, FastEmbed, LangGraph, and the Python Groq SDK.
 
 - Groq over OpenAI for Phase 1 chat:
   - Faster and lower-cost for demo testing.
@@ -252,12 +252,12 @@ flowchart LR
   - Much faster and cheaper for YouTube.
   - Captions may be unavailable or imperfect, so Whisper fallback remains.
 
-- Whisper fallback for Instagram:
+- Groq Whisper fallback for Instagram:
   - More reliable than depending on platform transcript support.
-  - Slower and requires local compute.
+  - Avoids local model downloads and CPU-bound transcription.
 
 - Transcript cap through `MAX_VIDEO_SECONDS`:
-  - Controls demo latency and cost for audio download plus Whisper fallback.
+  - Controls demo latency and cost for audio download plus Groq Whisper fallback.
   - YouTube captions are uncapped, so videos longer than 10 minutes can ingest when captions are available.
   - Full Whisper-based long-form analysis is deferred.
 

@@ -9,6 +9,7 @@ class Settings(BaseSettings):
 
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
     groq_chat_model: str = Field(default="llama-3.3-70b-versatile", alias="GROQ_CHAT_MODEL")
+    groq_transcription_model: str = Field(default="whisper-large-v3", alias="GROQ_TRANSCRIPTION_MODEL")
 
     database_url: str = Field(default="", alias="DATABASE_URL")
 
@@ -21,7 +22,6 @@ class Settings(BaseSettings):
     embedding_dimensions: int = Field(default=384, alias="EMBEDDING_DIMENSIONS")
 
     max_video_seconds: int = Field(default=600, alias="MAX_VIDEO_SECONDS")
-    whisper_model_size: str = Field(default="base", alias="WHISPER_MODEL_SIZE")
     tmp_dir: str = Field(default="/private/tmp/creator-rag", alias="TMP_DIR")
     force_refresh: bool = Field(default=False, alias="FORCE_REFRESH")
 
