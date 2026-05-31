@@ -2,10 +2,11 @@
 
 ## Operating Workflow
 
-- Before implementing any feature or fix, read `.codex/Agent.md` first and then read `.codex/Progress.md`.
+- Before implementing any feature or fix, read `.codex/Agents.md` first and then read `.codex/Progress.md`.
 - After each meaningful implementation chunk, update `.codex/Progress.md` with what changed, what was verified, and what remains.
 - Update this file when a planning or implementation decision changes the architecture, provider choices, schema, interfaces, or developer workflow.
 - For large work, create or update the relevant milestone in `.codex/PLANS.md` before implementation.
+- Keep phase documentation current in `docs/phase/phase-<number>.md`. Phase files start with scope only; as each phase progresses, expand the corresponding file with technologies, program flow, component flow, and tradeoffs in the same work chunk.
 
 ## Product Goal
 
@@ -63,6 +64,21 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - `faster-whisper` for transcription with word timestamps.
 - `youtube-transcript-api` for YouTube caption fast-path before Whisper fallback.
 - Minimal UI with two video cards and a chat panel.
+
+## Developer Workflow
+- All meaningful changes must update `Progress.md`.
+- All architectural/provider/schema changes must update `Agents.md` and the corresponding docs such as `ARCHITECTURE.md`, `PLANS.md`, `PRODUCT_SPEC.md`
+- External services must be abstracted behind provider wrappers so tests do not require Groq, Neon, Qdrant Cloud, YouTube, or Instagram.
+
+
+## Coding rules
+- Never hardcode secrets.
+- Prefer server-side checks for authorization.
+- Add tests for new behavior.
+
+## Do not
+- Do not rewrite unrelated files.
+- Do not introduce new libraries without explaining why.
 
 ## Decisions And Tradeoffs
 

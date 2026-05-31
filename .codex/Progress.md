@@ -7,12 +7,13 @@ Phase 1 implementation.
 ## Current Status
 
 - Repository initialized on `main`.
-- Planning decisions recorded in `.codex/Agent.md`.
+- Planning decisions recorded in `.codex/Agents.md`.
 - Backend and frontend Phase 1 implementation files have been added and lightweight checks pass.
 - Backend dev server is running at `http://127.0.0.1:8000`.
 - Frontend dev server is running at `http://localhost:3001` because port 3000 is already occupied locally.
 - Live ingest and chat smoke tests pass after the YouTube transcript fast-path and async ingestion changes.
 - Project docs have been moved under `.codex/`.
+- Scope-only phase documentation has been added under `docs/phase/`.
 
 ## Completed Chunks
 
@@ -42,10 +43,12 @@ Phase 1 implementation.
 - Added transcript source tags into Qdrant chunk payloads and prompt context.
 - Moved default runtime audio outside the repo and redirected legacy `TMP_DIR=tmp` to `/private/tmp/creator-rag`.
 - Added Qdrant payload index creation for `session_id`, `video_id`, and `is_hook`.
-- Moved root `AGENT.md` to `.codex/Agent.md`.
+- Moved root `AGENT.md` to `.codex/Agents.md`.
 - Moved root `Progress.md` to `.codex/Progress.md`.
 - Added `.codex/PRODUCT_SPEC.md`, `.codex/ARCHITECTURE.md`, and `.codex/PLANS.md`.
-- Added the revised Phase 0-4 plan to `.codex/Agent.md` and expanded phase milestones with acceptance criteria in `.codex/PLANS.md`.
+- Added the revised Phase 0-4 plan to `.codex/Agents.md` and expanded phase milestones with acceptance criteria in `.codex/PLANS.md`.
+- Added scope-only docs for Phase 0 through Phase 4 under `docs/phase/`.
+- Updated `.codex/Agents.md` workflow so phase docs start with scope and gain technologies, flow, components, and tradeoffs as each phase progresses.
 
 ## Current Next Step
 
