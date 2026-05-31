@@ -13,7 +13,7 @@ Phase 1 implementation.
 - Frontend dev server is running at `http://localhost:3001` because port 3000 is already occupied locally.
 - Live ingest and chat smoke tests pass after the YouTube transcript fast-path and async ingestion changes.
 - Project docs have been moved under `.codex/`.
-- Scope-only phase documentation has been added under `docs/phase/`.
+- Phase documentation is tracked under `docs/phase/`; Phase 1 now includes high-level Mermaid flow diagrams.
 
 ## Completed Chunks
 
@@ -47,8 +47,9 @@ Phase 1 implementation.
 - Moved root `Progress.md` to `.codex/Progress.md`.
 - Added `.codex/PRODUCT_SPEC.md`, `.codex/ARCHITECTURE.md`, and `.codex/PLANS.md`.
 - Added the revised Phase 0-4 plan to `.codex/Agents.md` and expanded phase milestones with acceptance criteria in `.codex/PLANS.md`.
-- Added scope-only docs for Phase 0 through Phase 4 under `docs/phase/`.
+- Added scope-only docs for Phase 1 through Phase 4 under `docs/phase/`.
 - Updated `.codex/Agents.md` workflow so phase docs start with scope and gain technologies, flow, components, and tradeoffs as each phase progresses.
+- Updated `docs/phase/phase-1.md` so the user flow, ingest/status/chat flow, and component flow are represented as high-level Mermaid diagrams instead of ordered flow lists.
 
 ## Current Next Step
 

@@ -43,182 +43,152 @@ Out of scope for this phase:
 
 ## User Flow At This Point
 
-1. User opens the Next.js UI.
-2. User enters two video URLs.
-3. User selects the platform for each URL: YouTube or Instagram.
-4. Frontend calls `POST /ingest`.
-5. Backend creates a session in Postgres and returns `session_id` immediately.
-6. Frontend stores the session ID and polls `GET /status/{session_id}` with adaptive delays.
-7. Backend scrapes and stores metadata for both videos first.
-8. Frontend renders available metadata cards while transcript work continues.
-9. Backend extracts transcripts, chunks them, embeds chunks, and upserts them to Qdrant.
-10. Backend marks the session `ready`.
-11. User asks a question in chat.
-12. Backend streams a cited answer through `POST /chat`.
+```mermaid
+flowchart TD
+    U[User] --> UI[Next.js UI]
+    UI --> Inputs[Enter two URLs and select platform per video]
+    Inputs --> Ingest[POST /ingest]
+    Ingest --> Session[Backend creates session_id]
+    Session --> Poll[UI polls GET /status/session_id]
+    Poll --> Cards[Metadata cards update as data arrives]
+    Cards --> Ready{Session ready?}
+    Ready -- No --> Poll
+    Ready -- Yes --> Chat[User asks a chat question]
+    Chat --> Stream[Backend streams cited answer]
+    Stream --> UI
+```
 
 ## Program Flow
 
 ### Ingest Flow
 
-1. `POST /ingest` accepts:
+```mermaid
+flowchart TD
+    Request[POST /ingest with Video A and Video B] --> Validate[Validate request contract]
+    Validate --> Session[Create Postgres session: processing]
+    Session --> Background[Start background ingestion]
 
-   ```json
-   {
-     "videos": [
-       { "video_id": "A", "platform": "youtube", "url": "..." },
-       { "video_id": "B", "platform": "instagram", "url": "..." }
-     ]
-   }
-   ```
+    Background --> Metadata[Metadata pass for both videos]
+    Metadata --> StoreMeta[Upsert video_metadata in Postgres]
+    StoreMeta --> Parallel[Run transcript/vector work concurrently]
 
-2. Backend validates that exactly two videos resolve to Video A and Video B.
-3. Backend creates a `sessions` row with:
-   - `status = processing`
-   - `current_step = Queued`
-   - `progress_percent = 0`
-4. FastAPI background task starts ingestion.
-5. Metadata pass runs first for both videos:
-   - `yt-dlp` extracts platform, creator, views, likes, comments, follower count, hashtags, upload date, and duration.
-   - Engagement rate is computed as `(likes + comments) / views * 100`.
-   - Metadata is upserted into `video_metadata`.
-6. Transcript/vector pass runs concurrently per video:
-   - YouTube first tries `youtube-transcript-api`.
-   - If captions fail or are unavailable, YouTube falls back to `yt-dlp` audio download plus `faster-whisper`.
-   - Instagram goes directly to audio download plus `faster-whisper`.
-   - Long videos are capped to `MAX_VIDEO_SECONDS`.
-7. Chunker builds sliding-window chunks:
-   - about 60 words
-   - 12-word overlap
-   - source tags
-   - `is_hook = start_time < 5.0`
-8. FastEmbed embeds chunks.
-9. Qdrant stores vectors with payload fields:
-   - `session_id`
-   - `video_id`
-   - `chunk_index`
-   - `start_time`
-   - `end_time`
-   - `is_hook`
-   - `source_tag`
-   - `transcript_source`
-10. Backend marks session `ready`.
+    Parallel --> VideoA[Video A pipeline]
+    Parallel --> VideoB[Video B pipeline]
+
+    VideoA --> TranscriptA{YouTube captions available?}
+    VideoB --> TranscriptB{YouTube captions available?}
+
+    TranscriptA -- Yes --> CaptionsA[Normalize captions to timestamped words]
+    TranscriptA -- No or Instagram --> WhisperA[Download/trim audio and transcribe with Whisper]
+
+    TranscriptB -- Yes --> CaptionsB[Normalize captions to timestamped words]
+    TranscriptB -- No or Instagram --> WhisperB[Download/trim audio and transcribe with Whisper]
+
+    CaptionsA --> ChunkA[Chunk transcript]
+    WhisperA --> ChunkA
+    CaptionsB --> ChunkB[Chunk transcript]
+    WhisperB --> ChunkB
+
+    ChunkA --> EmbedA[Embed chunks with FastEmbed]
+    ChunkB --> EmbedB[Embed chunks with FastEmbed]
+
+    EmbedA --> Qdrant[Upsert vectors to Qdrant]
+    EmbedB --> Qdrant
+    Qdrant --> Ready[Mark session ready in Postgres]
+```
 
 ### Status Flow
 
-1. Frontend polls `GET /status/{session_id}` while status is `processing`.
-2. Response includes:
-   - session status
-   - error message if failed
-   - current step
-   - progress percent
-   - metadata rows
-3. Polling is adaptive:
-   - faster early polling while metadata appears
-   - slower polling during long transcript work
-4. The progress bar reflects persisted Postgres state, not frontend-only state.
+```mermaid
+flowchart TD
+    UI[Frontend] --> Status[GET /status/session_id]
+    Status --> Postgres[(Postgres sessions + metadata)]
+    Postgres --> Response[status, progress, current_step, metadata, error]
+    Response --> UI
+    UI --> Decision{processing?}
+    Decision -- Yes --> Adaptive[Wait adaptive delay]
+    Adaptive --> Status
+    Decision -- Ready --> EnableChat[Enable chat]
+    Decision -- Failed --> ShowError[Show failure state]
+```
 
 ### Chat Flow
 
-1. Frontend sends `POST /chat` with `session_id` and user message.
-2. Backend rejects chat until session is `ready`.
-3. LangGraph loads:
-   - chat history from Postgres
-   - metadata from Postgres
-   - transcript chunks from Qdrant
-4. Prompt is built with:
-   - `[METADATA]`
-   - `[TRANSCRIPT CHUNKS]`
-   - recent chat history
-   - user question
-5. Groq streams the answer token-by-token.
-6. Backend emits SSE events:
-   - `sources`
-   - `token`
-   - `done`
-   - `error`
-7. Assistant response and source list are persisted in `chat_messages`.
+```mermaid
+flowchart TD
+    UserQuestion[POST /chat] --> ReadyCheck{Session ready?}
+    ReadyCheck -- No --> Reject[Return not-ready error]
+    ReadyCheck -- Yes --> Graph[LangGraph retrieval flow]
+
+    Graph --> History[(Postgres chat history)]
+    Graph --> Metadata[(Postgres video_metadata)]
+    Graph --> Chunks[(Qdrant transcript chunks)]
+
+    History --> Prompt[Build grounded prompt]
+    Metadata --> Prompt
+    Chunks --> Prompt
+
+    Prompt --> Groq[Groq streaming chat model]
+    Groq --> SSE[SSE: sources, token, done/error]
+    SSE --> Frontend[Frontend chat panel]
+    SSE --> Persist[(Persist assistant message and sources)]
+```
 
 ## Component Flow
 
-### Frontend
+```mermaid
+flowchart LR
+    subgraph Frontend[Next.js Frontend]
+        Page[page.tsx: inputs, metadata cards, progress, chat]
+        Styles[globals.css: layout and states]
+    end
 
-- `frontend/src/app/page.tsx`
-  - Owns URL inputs, platform selectors, session state, progress display, metadata cards, chat history, and SSE parsing.
-  - Stores the current session ID in local storage for refresh recovery.
+    subgraph API[FastAPI Backend]
+        Main[main.py: API routes and startup checks]
+        Schemas[schemas.py: request contracts]
+    end
 
-- `frontend/src/app/globals.css`
-  - Provides the minimal app layout, cards, progress bar, messages, source chips, and responsive behavior.
+    subgraph Ingestion[Ingestion Layer]
+        Metadata[metadata.py: yt-dlp metadata]
+        Captions[youtube_transcript.py: YouTube captions]
+        Download[downloader.py: audio download/trim]
+        Whisper[transcriber.py: Whisper fallback]
+        Chunker[chunker.py: transcript chunks]
+        Pipeline[pipeline.py: orchestration and progress]
+    end
 
-### Backend API
+    subgraph Storage[Storage Layer]
+        Postgres[Postgres: sessions, metadata, chat]
+        Qdrant[Qdrant: transcript vectors]
+    end
 
-- `backend/app/main.py`
-  - Creates FastAPI app.
-  - Configures CORS.
-  - Runs startup checks.
-  - Exposes health, ingest, status, messages, and chat endpoints.
+    subgraph RAG[RAG Layer]
+        Graph[graph.py: LangGraph retrieval]
+        Prompt[prompt.py: grounded prompt]
+        Groq[chat_client.py: Groq streaming]
+        Service[service.py: SSE and persistence]
+    end
 
-- `backend/app/api/schemas.py`
-  - Defines the ingest and chat request contracts.
-  - Supports both new generic `videos` input and legacy `youtube_url`/`instagram_url` input.
-
-### Ingestion
-
-- `backend/app/ingest/metadata.py`
-  - Extracts metadata through `yt-dlp`.
-  - Normalizes missing values.
-  - Computes engagement rate.
-
-- `backend/app/ingest/youtube_transcript.py`
-  - Extracts YouTube video IDs from common URL shapes.
-  - Fetches captions when available.
-  - Converts caption segments into `{text, start, end}` word-like records.
-
-- `backend/app/ingest/downloader.py`
-  - Downloads audio with `yt-dlp`.
-  - Caps long videos to the configured max transcript window.
-  - Writes runtime audio outside the repo by default.
-
-- `backend/app/ingest/transcriber.py`
-  - Loads `faster-whisper`.
-  - Produces word-level timestamp records.
-
-- `backend/app/ingest/chunker.py`
-  - Converts transcript words into overlapping chunks.
-  - Adds timestamps, hook flags, engagement rate, source tags, and transcript source.
-
-- `backend/app/ingest/pipeline.py`
-  - Coordinates ingestion.
-  - Stores metadata first.
-  - Runs transcript/vector work concurrently.
-  - Updates persisted progress.
-  - Handles cleanup and failure state.
-
-### Storage
-
-- `backend/app/store/models.py`
-  - Defines SQLAlchemy models for sessions, video metadata, and chat messages.
-
-- `backend/app/store/postgres.py`
-  - Encapsulates session status, progress, metadata, and chat-message reads/writes.
-
-- `backend/app/store/vector.py`
-  - Manages Qdrant client, collection creation, dimension validation, payload indexes, embeddings, upsert, and retrieval.
-
-### RAG
-
-- `backend/app/rag/graph.py`
-  - LangGraph retrieval flow.
-  - Loads history, metadata, and transcript chunks.
-
-- `backend/app/rag/prompt.py`
-  - Builds the grounded prompt.
-  - Formats metadata and transcript chunks with source tags.
-
-- `backend/app/rag/chat_client.py`
-  - Wraps Groq streaming.
-
-- `backend/app/rag/service.py`
-  - Produces SSE events and persists chat messages.
+    Page --> Main
+    Main --> Schemas
+    Main --> Pipeline
+    Pipeline --> Metadata
+    Pipeline --> Captions
+    Pipeline --> Download
+    Download --> Whisper
+    Captions --> Chunker
+    Whisper --> Chunker
+    Chunker --> Qdrant
+    Pipeline --> Postgres
+    Main --> Service
+    Service --> Graph
+    Graph --> Postgres
+    Graph --> Qdrant
+    Graph --> Prompt
+    Prompt --> Groq
+    Groq --> Service
+    Service --> Page
+```
 
 ## Data Ownership
 
