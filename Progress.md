@@ -9,8 +9,9 @@ Phase 1 implementation.
 - Repository initialized on `main`.
 - Planning decisions recorded in `AGENT.md`.
 - Backend and frontend Phase 1 implementation files have been added and lightweight checks pass.
-- Frontend dev server was started successfully at `http://localhost:3000` during verification, but the process is no longer attached after the interrupted turn.
-- All Phase 1 files are staged in git; the commit was interrupted before completion.
+- Backend dev server is running at `http://127.0.0.1:8000`.
+- Frontend dev server is running at `http://localhost:3001` because port 3000 is already occupied locally.
+- Live ingest and chat smoke tests pass after the YouTube transcript fast-path and async ingestion changes.
 
 ## Completed Chunks
 
@@ -24,16 +25,30 @@ Phase 1 implementation.
 - Installed backend dependencies in `backend/.venv`.
 - Fixed Next.js workspace-root warning by setting `outputFileTracingRoot`.
 - Adjusted prompt formatting so missing follower counts are exposed as `unavailable` instead of `0`.
+- Replaced fixed YouTube/Instagram frontend inputs with two video slots, each with a YouTube/Instagram selector.
+- Updated `/ingest` to accept `videos: [{ video_id, platform, url }]` while keeping the old `youtube_url`/`instagram_url` payload compatible.
+- Changed long-video handling from hard failure to first-window trimming based on `MAX_VIDEO_SECONDS`.
+- Changed ingestion to scrape/store metadata for both videos before starting audio download/transcription.
+- Added structured console logging across startup, metadata scraping, audio download, transcription, chunking, Qdrant upsert, retrieval, and failures.
+- Added Qdrant collection dimension validation during startup.
+- Expanded development CORS defaults to allow local frontend ports 3000 and 3001.
+- Added persisted session progress fields: `current_step` and `progress_percent`.
+- Updated ingestion to write progress at metadata, download, transcription, chunking, embedding, finished-video, ready, and failure stages.
+- Updated frontend status display with a progress bar and adaptive polling delays instead of fixed 2.5-second polling.
+- Added `youtube-transcript-api` as a backend dependency.
+- Added YouTube video ID extraction and caption fast-path with Whisper fallback.
+- Refactored ingestion so per-video transcript/vector work runs concurrently after the metadata pass.
+- Added transcript source tags into Qdrant chunk payloads and prompt context.
+- Moved default runtime audio outside the repo and redirected legacy `TMP_DIR=tmp` to `/private/tmp/creator-rag`.
+- Added Qdrant payload index creation for `session_id`, `video_id`, and `is_hook`.
 
 ## Current Next Step
 
-Configure `.env` with Neon, Qdrant Cloud, and Groq credentials, then run live `/health`, ingestion, and chat tests. After that, create the Phase 1 commit.
+Move to Phase 2 planning or continue hardening Phase 1 edge cases.
 
 ## Known Issues
 
-- External credentials are not present yet, so cloud-service integration can only be verified after `.env` is configured.
-- Live backend startup cannot complete without `DATABASE_URL`, `QDRANT_URL`, `QDRANT_API_KEY`, and `GROQ_API_KEY`.
-- The Phase 1 commit has not been created yet because the commit command was interrupted.
+- None currently blocking Phase 1.
 
 ## Manual Test Results
 
@@ -46,3 +61,13 @@ Configure `.env` with Neon, Qdrant Cloud, and Groq credentials, then run live `/
 - `backend/.venv/bin/python -c "import backend.app.main"` passed.
 - Chunker smoke test passed for source tags, overlap chunking, and hook flag.
 - `npm run dev` initially failed under sandbox port permissions, then started successfully after escalation.
+- `backend/.venv/bin/python -c "import backend.app.main"` passed after the latest fixes.
+- `npm run build` passed after the latest frontend platform-selector changes.
+- `GET /health` on the running backend returned `{"api": true, "postgres": true, "qdrant": true}` using the configured cloud credentials.
+- Backend restart after Qdrant dimension validation passed; startup logged existing collection dimension `384` matching expected `384`.
+- CORS preflight from `http://localhost:3001` to `POST /ingest` passed.
+- `GET /status/{session_id}` now returns `current_step`, `progress_percent`, and `updated_at`.
+- `youtube_transcript_api` live smoke test returned 1,280 caption-derived word objects for `https://youtu.be/cLpfcn_dPEo`.
+- Live ingest for the two YouTube URLs from the issue completed with status `ready` in about 14 seconds using `youtube_captions` for both videos.
+- The same live ingest upserted 38 chunks for Video A and 27 chunks for Video B to Qdrant.
+- Chat smoke test streamed an engagement-rate answer with `[Video A metadata]` and `[Video B metadata]` citations.

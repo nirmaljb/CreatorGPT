@@ -21,6 +21,7 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - FastEmbed `BAAI/bge-small-en-v1.5` for embeddings during testing.
 - `yt-dlp` for metadata and audio download.
 - `faster-whisper` for transcription with word timestamps.
+- `youtube-transcript-api` for YouTube caption fast-path before Whisper fallback.
 - Minimal UI with two video cards and a chat panel.
 
 ## Decisions And Tradeoffs
@@ -45,6 +46,19 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - The frontend uses `fetch` with a POST body and manually parses SSE because native `EventSource` does not support POST request bodies.
 - Frontend config pins `outputFileTracingRoot` to the frontend directory because this machine has another lockfile above the repo and Next.js otherwise infers the wrong root.
 - Downloaded audio files are temporary and are deleted after ingestion finishes or fails.
+- Phase 1 input is now two generic video slots. Each slot can be marked as YouTube or Instagram in the UI, while defaulting to Video A = YouTube and Video B = Instagram for the assignment demo.
+- Videos longer than `MAX_VIDEO_SECONDS` are no longer rejected in Phase 1. The downloader trims ingestion to the first configured window so long videos can still produce hook and early-transcript chunks.
+- Ingestion uses a two-pass flow: scrape/store metadata for both videos first, then download/transcribe/embed each video. This makes status responses useful even while long transcription work is still running.
+- Ingestion logs are intentionally verbose in development: session ID, video ID, requested platform, metadata counts, duration, audio path, transcription word count, chunk count, Qdrant upsert count, elapsed time, and stack traces on failure.
+- Qdrant startup now validates existing collection dimensions against `EMBEDDING_DIMENSIONS` so provider/model swaps fail with a clear error instead of during upsert.
+- Development CORS allows local frontend ports 3000 and 3001 because Next.js may move to 3001 when 3000 is already occupied.
+- Session status includes persisted progress fields: `current_step` and `progress_percent`. The frontend uses them to show ingestion progress and to poll adaptively instead of using a fixed short interval.
+- YouTube ingestion first tries `youtube-transcript-api` captions and normalizes captions into the same `{text, start, end}` shape as Whisper output. If captions are unavailable or the caption API fails, ingestion falls back to `yt-dlp + faster-whisper`.
+- YouTube caption transcripts are capped to `MAX_VIDEO_SECONDS`, matching the existing Phase 1 transcript cap for Whisper.
+- Per-video transcript/vector work now runs concurrently with `asyncio.gather` after both metadata rows are stored. Blocking operations run through `asyncio.to_thread`.
+- Qdrant payload indexes are created at startup for `session_id`, `video_id`, and `is_hook` because Qdrant Cloud requires indexed payload fields for filtered search.
+- Runtime audio uses `Settings.effective_tmp_dir`; legacy `TMP_DIR=tmp` is redirected to `/private/tmp/creator-rag` to avoid `uvicorn --reload` watching generated media files.
+- FastEmbed/Qdrant client and faster-whisper model initialization are lock-protected for threaded ingestion.
 
 ## Source Citation Format
 

@@ -6,7 +6,7 @@ Full-stack Phase 1 implementation for comparing one YouTube video and one Instag
 
 - Backend: FastAPI, LangGraph, Groq, FastEmbed, Qdrant Cloud, Neon Postgres
 - Frontend: Next.js
-- Media: `yt-dlp`, `faster-whisper`
+- Media: `youtube-transcript-api`, `yt-dlp`, `faster-whisper`
 
 ## Backend
 
@@ -17,10 +17,12 @@ source .venv/bin/activate
 pip install -r requirements.txt
 cd ..
 cp .env.example .env
-uvicorn backend.app.main:app --reload
+uvicorn backend.app.main:app --reload --reload-dir backend/app
 ```
 
-`ffmpeg` must be installed for reliable audio extraction.
+`ffmpeg` must be installed for reliable audio extraction. Temporary audio is written outside the repo by default so reload mode does not restart on media-file changes.
+
+YouTube ingestion tries captions first and only falls back to audio download plus Whisper when captions are unavailable. Instagram uses the audio plus Whisper path.
 
 ## Frontend
 
