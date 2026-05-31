@@ -23,7 +23,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -64,9 +65,42 @@ h1 {
   text-align: center;
 }
 
+.status-block {
+  display: grid;
+  gap: 8px;
+  min-width: min(360px, 100%);
+}
+
 .status.ready {
   background: var(--soft-green);
   color: var(--accent-strong);
+}
+
+.progress-summary {
+  display: grid;
+  gap: 6px;
+}
+
+.progress-label {
+  color: var(--muted);
+  display: flex;
+  font-size: 12px;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.progress-track {
+  background: #e7ebf0;
+  border-radius: 999px;
+  height: 8px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  background: var(--accent);
+  border-radius: inherit;
+  height: 100%;
+  transition: width 180ms ease;
 }
 
 .status.failed,
@@ -81,6 +115,12 @@ h1 {
   margin-bottom: 10px;
 }
 
+.url-control {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 132px minmax(0, 1fr);
+}
+
 label {
   color: var(--muted);
   display: grid;
@@ -88,7 +128,8 @@ label {
   gap: 6px;
 }
 
-input {
+input,
+select {
   border: 1px solid var(--line);
   border-radius: 8px;
   min-height: 42px;
@@ -96,7 +137,8 @@ input {
   width: 100%;
 }
 
-input:focus {
+input:focus,
+select:focus {
   border-color: var(--accent);
   outline: 2px solid rgba(15, 118, 110, 0.14);
 }
@@ -330,5 +372,9 @@ dd {
 
   .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .url-control {
+    grid-template-columns: 1fr;
   }
 }
