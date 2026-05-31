@@ -2,13 +2,53 @@
 
 ## Operating Workflow
 
-- Before implementing any feature or fix, read this file first and then read `Progress.md`.
-- After each meaningful implementation chunk, update `Progress.md` with what changed, what was verified, and what remains.
+- Before implementing any feature or fix, read `.codex/Agent.md` first and then read `.codex/Progress.md`.
+- After each meaningful implementation chunk, update `.codex/Progress.md` with what changed, what was verified, and what remains.
 - Update this file when a planning or implementation decision changes the architecture, provider choices, schema, interfaces, or developer workflow.
+- For large work, create or update the relevant milestone in `.codex/PLANS.md` before implementation.
 
 ## Product Goal
 
 Build a full-stack RAG chatbot that compares one YouTube video and one Instagram Reel. The system ingests video URLs, extracts metadata and transcripts, chunks and embeds transcript text, stores chunks in Qdrant, stores durable session/chat/video state in Postgres, and answers creator questions with streaming, cited responses.
+
+## Revised Phase Plan
+
+### Phase 0 — Contracts and Demo Safety
+
+- Define API contracts, DB schema, provider interfaces, env validation, and extraction cache.
+- Create README skeleton, Progress.md, and demo script outline.
+- Select known-good YouTube and Instagram test URLs.
+
+### Phase 1 — Thin Vertical Slice
+
+- Build FastAPI ingest/status/chat endpoints.
+- Return session_id immediately from ingest.
+- Run ingestion in background.
+- Store sessions, video metadata, transcript chunks, and chat history.
+- Store vectors in Qdrant with video_id/session_id payload filters.
+- Build minimal Next.js UI with two URL inputs, progress state, and streaming chat.
+- Verify one full flow: ingest -> status complete -> chat -> cited answer.
+
+### Phase 2 — Grounded Intelligence
+
+- Add LangGraph routing for numeric, semantic, hook, and recommendation questions.
+- Use typed metadata tools instead of a free-form SQL agent.
+- Use transcript retrieval only for semantic questions.
+- Use first-5-second chunks for hook comparison.
+- Add citation validation and an eval script for assignment questions.
+
+### Phase 3 — Product UI
+
+- Add side-by-side video cards with metrics.
+- Add citation chips, suggested questions, loading states, and failure states.
+- Make the demo path feel fast and obvious.
+
+### Phase 4 — Resilience and Demo Readiness
+
+- Add provider-mocked smoke tests.
+- Add markdown linting and CI.
+- Finalize README, architecture notes, cost/scaling notes, and Loom script.
+- Run clean-clone demo rehearsal before recording.
 
 ## Phase 1 Scope
 
@@ -40,7 +80,7 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Responses must cite facts with source tags. Numeric claims should come from Postgres metadata or chunk payloads, not model invention.
 - Missing Instagram metadata is expected. Unknown strings stay `unknown`; missing counts default to `0`; unavailable follower counts should be stated as unavailable when needed.
 - Phase 1 uses SQLAlchemy `create_all` at startup instead of Alembic migrations to reduce setup overhead. If schema churn starts, add migrations in a later phase.
-- Ingestion runs as a FastAPI background task and processes Video A then Video B sequentially. This is simpler and safer for the demo; a production version should move this to a durable queue.
+- Ingestion runs as a FastAPI background task. Metadata is processed first for both videos, then per-video transcript/vector work runs concurrently. A production version should move this to a durable queue.
 - Backend startup validates Postgres and Qdrant by creating tables and ensuring the vector collection. This is fail-fast by design when `.env` is missing or cloud services are unavailable.
 - The chat path uses LangGraph for durable retrieval orchestration, then streams Groq tokens through a small provider wrapper so OpenAI can replace Groq later with minimal changes.
 - The frontend uses `fetch` with a POST body and manually parses SSE because native `EventSource` does not support POST request bodies.

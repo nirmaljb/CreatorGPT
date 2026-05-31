@@ -7,11 +7,12 @@ Phase 1 implementation.
 ## Current Status
 
 - Repository initialized on `main`.
-- Planning decisions recorded in `AGENT.md`.
+- Planning decisions recorded in `.codex/Agent.md`.
 - Backend and frontend Phase 1 implementation files have been added and lightweight checks pass.
 - Backend dev server is running at `http://127.0.0.1:8000`.
 - Frontend dev server is running at `http://localhost:3001` because port 3000 is already occupied locally.
 - Live ingest and chat smoke tests pass after the YouTube transcript fast-path and async ingestion changes.
+- Project docs have been moved under `.codex/`.
 
 ## Completed Chunks
 
@@ -41,10 +42,14 @@ Phase 1 implementation.
 - Added transcript source tags into Qdrant chunk payloads and prompt context.
 - Moved default runtime audio outside the repo and redirected legacy `TMP_DIR=tmp` to `/private/tmp/creator-rag`.
 - Added Qdrant payload index creation for `session_id`, `video_id`, and `is_hook`.
+- Moved root `AGENT.md` to `.codex/Agent.md`.
+- Moved root `Progress.md` to `.codex/Progress.md`.
+- Added `.codex/PRODUCT_SPEC.md`, `.codex/ARCHITECTURE.md`, and `.codex/PLANS.md`.
+- Added the revised Phase 0-4 plan to `.codex/Agent.md` and expanded phase milestones with acceptance criteria in `.codex/PLANS.md`.
 
 ## Current Next Step
 
-Move to Phase 2 planning or continue hardening Phase 1 edge cases.
+Use `.codex/PLANS.md` for the next large task, likely Phase 2 grounded intelligence.
 
 ## Known Issues
 
@@ -71,3 +76,4 @@ Move to Phase 2 planning or continue hardening Phase 1 edge cases.
 - Live ingest for the two YouTube URLs from the issue completed with status `ready` in about 14 seconds using `youtube_captions` for both videos.
 - The same live ingest upserted 38 chunks for Video A and 27 chunks for Video B to Qdrant.
 - Chat smoke test streamed an engagement-rate answer with `[Video A metadata]` and `[Video B metadata]` citations.
+- Documentation restructure verified by listing `.codex/` contents.
