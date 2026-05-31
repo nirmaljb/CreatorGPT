@@ -58,6 +58,10 @@ Phase 1 implementation.
 - Added raw `yt-dlp` metadata storage on video metadata rows and extraction cache entries.
 - Updated the terminal ingest session status to `completed` while keeping `/chat` compatible with older `ready` sessions.
 - Fixed compare-query retrieval so questions mentioning both Video A and Video B retrieve transcript chunks from both videos instead of filtering to Video A.
+- Added typed Postgres metadata tools for video metrics, creator info, engagement comparison, and session video summaries.
+- Added question routing so numeric/creator/metadata questions bypass Qdrant retrieval, semantic transcript questions retrieve from Qdrant, and mixed comparison questions use both metadata tools and Qdrant.
+- Changed YouTube caption ingestion so captions are uncapped by `MAX_VIDEO_SECONDS`; videos longer than 10 minutes can ingest when captions are available, while audio/Whisper fallback remains capped.
+- Bumped extraction cache version to `extract-v2` so older capped-caption cache entries are not reused.
 
 ## Current Next Step
 
@@ -91,6 +95,9 @@ Use `.codex/PLANS.md` for the next large task, likely Phase 2 grounded intellige
 - Documentation restructure verified by listing `.codex/` contents.
 - `backend/.venv/bin/python -m compileall backend/app backend/tests` passed after ingestion cache/extractor changes.
 - `backend/.venv/bin/python -m unittest discover backend/tests` passed for cache key/sessionization behavior and compare-query routing.
+- `backend/.venv/bin/python -m unittest discover backend/tests` passed after metadata-tool routing was added; tests assert numeric metadata questions do not call Qdrant retrieval.
+- `backend/.venv/bin/python -m unittest discover backend/tests` passed after uncapping YouTube captions; tests assert caption words beyond 10 minutes are kept and long captioned YouTube videos do not use Whisper.
+- `backend/.venv/bin/python -m compileall backend/app backend/tests` and `git diff --check` passed after the long-caption change.
 - `npm run build` passed after adding per-video diagnostics and `completed` status support to the frontend.
 - Live mixed ingest on port 8001 with YouTube `https://youtu.be/cLpfcn_dPEo` and Instagram `https://instagram.com/reel/DEDbGqpyfkT/` returned `session_id=994ea123-443d-4dc9-80a0-2aac7e8627ae` immediately and reached `completed`.
 - That live mixed ingest stored raw metadata for both rows, used `captions` for Video A, used `whisper` for Video B, and upserted 27 Video A chunks plus 3 Video B chunks.
@@ -98,3 +105,5 @@ Use `.codex/PLANS.md` for the next large task, likely Phase 2 grounded intellige
 - Repeat ingest `session_id=4920d31a-0ee2-4d00-8b5b-e61d3e7a470c` hit the extraction cache for both metadata and transcripts, then completed with cache flags set for both videos.
 - Negative ingest `session_id=67fb27f9-9c42-4733-8f47-5f0fc2a48b7b` with a bad Instagram URL failed visibly; `/status` reported Video B `ingest_status=failed`, `transcript_source=unavailable`, and the extractor error message.
 - After the compare-query routing fix, chat on cached session `4920d31a-0ee2-4d00-8b5b-e61d3e7a470c` returned source events containing both Video A and Video B transcript chunks.
+- Numeric chat smoke test on cached session `4920d31a-0ee2-4d00-8b5b-e61d3e7a470c` for engagement rates returned only metadata sources and produced no Qdrant retrieval log.
+- Semantic chat smoke test on the same session for "What does Video B discuss?" retrieved 3 Video B chunks from Qdrant and streamed transcript citations.

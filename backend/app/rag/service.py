@@ -14,10 +14,18 @@ def _sse(event: str, payload: dict) -> str:
 def stream_rag_response(session_id: str, message: str) -> Iterator[str]:
     state = run_retrieval_graph(session_id=session_id, query=message)
     metadata = state.get("metadata", [])
+    metadata_tool_results = state.get("metadata_tool_results", [])
     chunks = state.get("chunks", [])
     history = state.get("history", [])
     sources = build_sources(metadata, chunks)
-    messages = build_chat_messages(message, metadata, chunks, history)
+    messages = build_chat_messages(
+        message,
+        metadata,
+        metadata_tool_results,
+        chunks,
+        history,
+        state.get("route", "semantic"),
+    )
 
     append_chat_message(session_id=session_id, role="user", content=message)
 

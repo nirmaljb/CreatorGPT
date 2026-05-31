@@ -45,7 +45,7 @@
 ### Milestones
 
 - Add LangGraph routing for numeric, semantic, hook, and recommendation questions.
-- Use typed metadata tools for numeric and creator/follower questions.
+- Use typed Postgres metadata tools for numeric and creator/follower questions.
 - Use transcript retrieval only for semantic and recommendation questions.
 - Restrict hook comparison to first-5-second chunks.
 - Add citation validation.
@@ -54,6 +54,7 @@
 ### Acceptance Criteria
 
 - Metadata questions do not depend on vector retrieval.
+- Numeric and creator questions bypass Qdrant retrieval entirely.
 - Hook questions cite hook chunks only.
 - Recommendation answers cite transcript evidence and metrics.
 - Eval script passes the assignment's core questions.

@@ -3,7 +3,7 @@ import json
 
 from backend.app.core.config import get_settings
 
-CACHE_VERSION = "extract-v1"
+CACHE_VERSION = "extract-v2"
 SESSION_METADATA_KEYS = {
     "session_id",
     "video_id",

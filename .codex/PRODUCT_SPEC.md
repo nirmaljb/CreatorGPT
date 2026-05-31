@@ -34,6 +34,9 @@ Creators need quick, evidence-backed explanations for performance differences. T
 - Cache real extraction results for repeatable demos, with `FORCE_REFRESH=true` for fresh extraction.
 - Chunk and embed transcripts into Qdrant with `session_id` and `video_id` payloads.
 - Maintain persisted session and chat history in Postgres.
+- Route numeric and creator metadata questions to Postgres metadata tools instead of vector retrieval.
+- Route semantic transcript questions to Qdrant retrieval.
+- Route mixed comparison questions to both metadata tools and Qdrant retrieval.
 - Stream responses.
 - Cite sources by video and metadata/chunk.
 
@@ -42,5 +45,7 @@ Creators need quick, evidence-backed explanations for performance differences. T
 - A clean demo can complete: ingest -> completed status -> chat -> cited answer.
 - Metadata questions are answered from Postgres.
 - Semantic transcript questions are answered from Qdrant chunks.
+- Numeric questions do not depend on vector retrieval.
 - Long YouTube videos avoid slow Whisper when captions are available.
+- YouTube videos longer than 10 minutes can ingest through captions; the 10-minute cap applies to Whisper/audio fallback.
 - Missing social metadata is handled honestly without invented values.

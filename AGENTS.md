@@ -100,6 +100,8 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Backend startup validates Postgres and Qdrant by creating tables and ensuring the vector collection. This is fail-fast by design when `.env` is missing or cloud services are unavailable.
 - The chat path uses LangGraph for durable retrieval orchestration, then streams Groq tokens through a small provider wrapper so OpenAI can replace Groq later with minimal changes.
 - Compare questions that mention both Video A and Video B retrieve chunks from both videos; single-video questions stay filtered to that video.
+- Numeric and creator metadata questions must bypass Qdrant retrieval and use typed Postgres metadata tools only: `get_video_metrics`, `get_creator_info`, `get_engagement_comparison`, and `get_session_video_summary`.
+- Semantic transcript questions use Qdrant retrieval. Mixed comparison questions use the Postgres metadata tools plus Qdrant retrieval.
 - The frontend uses `fetch` with a POST body and manually parses SSE because native `EventSource` does not support POST request bodies.
 - Frontend config pins `outputFileTracingRoot` to the frontend directory because this machine has another lockfile above the repo and Next.js otherwise infers the wrong root.
 - Downloaded audio files are temporary and are deleted after ingestion finishes or fails.
@@ -111,7 +113,7 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Development CORS allows local frontend ports 3000 and 3001 because Next.js may move to 3001 when 3000 is already occupied.
 - Session status includes persisted progress fields: `current_step` and `progress_percent`. The frontend uses them to show ingestion progress and to poll adaptively instead of using a fixed short interval.
 - YouTube ingestion first tries `youtube-transcript-api` captions and normalizes captions into the same `{text, start, end}` shape as Whisper output. If captions are unavailable or the caption API fails, ingestion falls back to `yt-dlp + faster-whisper`.
-- YouTube caption transcripts are capped to `MAX_VIDEO_SECONDS`, matching the existing Phase 1 transcript cap for Whisper.
+- YouTube caption transcripts are not capped by `MAX_VIDEO_SECONDS`; long YouTube videos can ingest through captions without Whisper. `MAX_VIDEO_SECONDS` only limits audio download/Whisper fallback.
 - Per-video transcript/vector work now runs concurrently with `asyncio.gather` after both metadata rows are stored. Blocking operations run through `asyncio.to_thread`.
 - Qdrant payload indexes are created at startup for `session_id`, `video_id`, and `is_hook` because Qdrant Cloud requires indexed payload fields for filtered search.
 - Runtime audio uses `Settings.effective_tmp_dir`; legacy `TMP_DIR=tmp` is redirected to `/private/tmp/creator-rag` to avoid `uvicorn --reload` watching generated media files.
@@ -120,7 +122,7 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Terminal ingest sessions use `completed` status. `/chat` still accepts older `ready` sessions for compatibility.
 - Video metadata rows store raw extractor metadata, per-video ingest status, failure messages, transcript source, chunk count, and cache flags.
 - Transcript source is recorded as `captions`, `whisper`, or `unavailable` in Postgres and chunk payloads.
-- Extraction cache is stored in Postgres by platform, URL, cache version, and `MAX_VIDEO_SECONDS` so repeated demos reuse real extractor output. `FORCE_REFRESH=true` bypasses cache reads and forces fresh extraction.
+- Extraction cache is stored in Postgres by platform, URL, cache version, and `MAX_VIDEO_SECONDS` so repeated demos reuse real extractor output. Cache version `extract-v2` avoids reusing older caption entries that were capped to `MAX_VIDEO_SECONDS`. `FORCE_REFRESH=true` bypasses cache reads and forces fresh extraction.
 - Ingestion must fail visibly for real extractor/download/transcription errors; do not silently fall back to fake metadata, fake transcripts, or fabricated chunks.
 
 ## Source Citation Format

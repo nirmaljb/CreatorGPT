@@ -11,8 +11,6 @@ from youtube_transcript_api._errors import (
     YouTubeTranscriptApiException,
 )
 
-from backend.app.core.config import get_settings
-
 logger = logging.getLogger(__name__)
 
 _api = YouTubeTranscriptApi()
@@ -62,18 +60,23 @@ def _split_segment(text: str, start: float, duration: float) -> list[dict]:
     return words
 
 
-def fetch_youtube_transcript(url: str, session_id: str, video_id: str) -> list[dict] | None:
+def fetch_youtube_transcript(
+    url: str,
+    session_id: str,
+    video_id: str,
+    max_seconds: float | None = None,
+) -> list[dict] | None:
     youtube_id = extract_youtube_video_id(url)
     if not youtube_id:
         logger.info("Could not extract YouTube video ID for Video %s session_id=%s", video_id, session_id)
         return None
 
-    settings = get_settings()
     logger.info(
-        "Fetching YouTube transcript for Video %s session_id=%s youtube_id=%s",
+        "Fetching YouTube transcript for Video %s session_id=%s youtube_id=%s max_seconds=%s",
         video_id,
         session_id,
         youtube_id,
+        max_seconds if max_seconds is not None else "unlimited",
     )
 
     try:
@@ -96,9 +99,11 @@ def fetch_youtube_transcript(url: str, session_id: str, video_id: str) -> list[d
 
     words: list[dict] = []
     for segment in transcript:
-        if segment.start >= settings.max_video_seconds:
+        if max_seconds is not None and segment.start >= max_seconds:
             break
-        segment_duration = min(segment.duration, settings.max_video_seconds - segment.start)
+        segment_duration = (
+            min(segment.duration, max_seconds - segment.start) if max_seconds is not None else segment.duration
+        )
         words.extend(_split_segment(segment.text, segment.start, segment_duration))
 
     if not words:

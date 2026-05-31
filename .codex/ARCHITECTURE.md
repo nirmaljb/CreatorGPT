@@ -17,12 +17,17 @@
 2. Ingestion runs in a FastAPI background task.
 3. Metadata for both videos is loaded from the extraction cache or scraped through the platform extractor, then stored first.
 4. Per-video transcript/vector work runs concurrently.
-5. YouTube tries captions first; unavailable captions fall back to audio download plus Whisper.
-6. Instagram uses audio download plus Whisper.
-7. Real extractor output is cached in Postgres unless `FORCE_REFRESH=true` bypasses cache reads for the run.
-8. Transcript chunks are embedded and stored in Qdrant with payload filters.
-9. Completed sessions move to `completed`; failed videos include per-video error details in status responses.
-10. `POST /chat` loads metadata/history from Postgres, retrieves transcript chunks from Qdrant, and streams a Groq answer. Compare questions that mention both videos retrieve chunks from each video.
+5. YouTube tries uncapped captions first, so videos longer than `MAX_VIDEO_SECONDS` can ingest when captions are available.
+6. Unavailable YouTube captions fall back to audio download plus Whisper, where audio is trimmed to `MAX_VIDEO_SECONDS`.
+7. Instagram uses audio download plus Whisper.
+8. Real extractor output is cached in Postgres unless `FORCE_REFRESH=true` bypasses cache reads for the run.
+9. Transcript chunks are embedded and stored in Qdrant with payload filters.
+10. Completed sessions move to `completed`; failed videos include per-video error details in status responses.
+11. `POST /chat` loads chat history and classifies the question as metadata, semantic, or mixed.
+12. Metadata questions use typed Postgres metadata tools only and do not query Qdrant.
+13. Semantic transcript questions retrieve transcript chunks from Qdrant.
+14. Mixed comparison questions use both typed Postgres metadata tools and Qdrant transcript retrieval.
+15. The backend streams a Groq answer with metadata and/or transcript citations. Compare questions that mention both videos retrieve chunks from each video.
 
 ## Database Schema
 
@@ -107,6 +112,16 @@ Payload indexes are created for `session_id`, `video_id`, and `is_hook`.
 - `GET /status/{session_id}`: returns status, progress, errors, and metadata.
 - `GET /messages/{session_id}`: returns persisted chat history.
 - `POST /chat`: streams SSE events for sources, tokens, done, or errors. Accepts `completed` sessions and older `ready` sessions.
+
+## Chat Routing
+
+- `get_video_metrics(session_id)`: Postgres metadata tool for views, likes, comments, duration, and engagement rate.
+- `get_creator_info(session_id, video_id)`: Postgres metadata tool for creator and follower count.
+- `get_engagement_comparison(session_id)`: Postgres metadata tool for engagement-rate comparison.
+- `get_session_video_summary(session_id)`: Postgres metadata tool for broad metadata summaries.
+- Numeric and creator metadata questions bypass Qdrant entirely.
+- Transcript and hook questions use Qdrant retrieval.
+- Mixed comparison questions combine metadata tool results with Qdrant chunks.
 
 ## Auth
 

@@ -18,6 +18,8 @@ Included in this phase:
 - Transcript chunking, embedding, and Qdrant storage.
 - Durable session, metadata, and chat history storage in Neon Postgres.
 - LangGraph retrieval path that loads metadata from Postgres and transcript chunks from Qdrant.
+- Typed Postgres metadata tools for numeric, creator, engagement, and summary questions.
+- Chat routing that bypasses Qdrant for numeric/metadata questions and uses Qdrant for transcript questions.
 - Real SSE streaming from Groq.
 - Source citations for metadata and transcript chunks.
 
@@ -121,15 +123,17 @@ flowchart TD
 flowchart TD
     UserQuestion[POST /chat] --> ReadyCheck{Session completed?}
     ReadyCheck -- No --> Reject[Return not-completed error]
-    ReadyCheck -- Yes --> Graph[LangGraph retrieval flow]
+    ReadyCheck -- Yes --> Route[Classify metadata, semantic, or mixed]
 
-    Graph --> History[(Postgres chat history)]
-    Graph --> Metadata[(Postgres video_metadata)]
-    Graph --> Chunks[(Qdrant transcript chunks)]
+    Route --> History[(Postgres chat history)]
+    Route --> MetadataTools[Typed Postgres metadata tools]
+    Route -- Semantic or mixed --> Chunks[(Qdrant transcript chunks)]
+    Route -- Metadata only --> NoChunks[Skip Qdrant retrieval]
 
     History --> Prompt[Build grounded prompt]
-    Metadata --> Prompt
+    MetadataTools --> Prompt
     Chunks --> Prompt
+    NoChunks --> Prompt
 
     Prompt --> Groq[Groq streaming chat model]
     Groq --> SSE[SSE: sources, token, done/error]
@@ -169,6 +173,7 @@ flowchart LR
 
     subgraph RAG[RAG Layer]
         Graph[graph.py: LangGraph retrieval]
+        Tools[metadata_tools.py: typed Postgres metadata tools]
         Prompt[prompt.py: grounded prompt]
         Groq[chat_client.py: Groq streaming]
         Service[service.py: SSE and persistence]
@@ -190,6 +195,7 @@ flowchart LR
     Main --> Service
     Service --> Graph
     Graph --> Postgres
+    Graph --> Tools
     Graph --> Qdrant
     Graph --> Prompt
     Prompt --> Groq
@@ -214,6 +220,8 @@ flowchart LR
   - hook chunk retrieval
 
 - Metadata is duplicated in Qdrant payloads only for retrieval context and citation support. Canonical metadata answers should come from Postgres.
+- Numeric and creator metadata chat questions use typed Postgres metadata tools and skip Qdrant retrieval.
+- Semantic transcript questions use Qdrant. Mixed comparison questions combine metadata tool results with transcript chunks.
 
 ## Decision Tradeoffs
 
@@ -249,8 +257,9 @@ flowchart LR
   - Slower and requires local compute.
 
 - Transcript cap through `MAX_VIDEO_SECONDS`:
-  - Controls demo latency and cost.
-  - Full long-form analysis is deferred.
+  - Controls demo latency and cost for audio download plus Whisper fallback.
+  - YouTube captions are uncapped, so videos longer than 10 minutes can ingest when captions are available.
+  - Full Whisper-based long-form analysis is deferred.
 
 - Concurrent per-video transcript/vector work:
   - Greatly reduces two-video ingest time.
@@ -272,6 +281,11 @@ flowchart LR
   - Allows request body with `session_id` and message.
   - Requires manual SSE parsing on the frontend.
 
+- Rule-based chat routing for Phase 1:
+  - Keeps numeric and creator answers grounded in Postgres.
+  - Avoids vector retrieval for questions that can be answered exactly from metadata.
+  - Leaves richer classification for Phase 2.
+
 ## Current Acceptance State
 
 - Backend imports and compiles.
@@ -279,7 +293,9 @@ flowchart LR
 - Health checks pass against Neon and Qdrant.
 - Live mixed YouTube + Instagram Reel ingest completed on port 8001.
 - Video A used captions and stored 27 chunks; Video B used Whisper and stored 3 chunks.
+- YouTube captions are uncapped by `MAX_VIDEO_SECONDS`; long captioned YouTube videos ingest without using Whisper.
 - Status responses expose raw-metadata presence, transcript source, chunk count, cache flags, and per-video failures.
 - Repeat ingest hit the extraction cache for both metadata and transcripts.
 - Bad Instagram URL smoke test failed visibly with Video B `ingest_status=failed`.
 - Chat streamed cited answers with transcript chunks from both videos for compare questions.
+- Numeric and creator metadata questions are routed to Postgres metadata tools and bypass Qdrant retrieval.

@@ -22,7 +22,7 @@ uvicorn backend.app.main:app --reload --reload-dir backend/app
 
 `ffmpeg` must be installed for reliable audio extraction. Temporary audio is written outside the repo by default so reload mode does not restart on media-file changes.
 
-YouTube ingestion tries captions first and only falls back to audio download plus Whisper when captions are unavailable. Instagram uses the audio plus Whisper path.
+YouTube ingestion tries captions first and only falls back to audio download plus Whisper when captions are unavailable. YouTube captions are not capped by `MAX_VIDEO_SECONDS`, so videos longer than 10 minutes can ingest when captions are available. Instagram uses the audio plus Whisper path.
 
 Extractor results are cached in Postgres by platform, URL, cache version, and `MAX_VIDEO_SECONDS` so repeated demos can reuse real metadata and transcripts. Set `FORCE_REFRESH=true` to bypass cache reads and force fresh extraction.
 
