@@ -43,6 +43,7 @@ def chunk_transcript(
             "engagement_rate": metadata["engagement_rate"],
             "creator": metadata["creator"],
             "url": metadata["url"],
+            "transcript_source": metadata.get("transcript_source", "unknown"),
         }
         chunk["source_tag"] = source_tag(chunk)
         chunks.append(chunk)

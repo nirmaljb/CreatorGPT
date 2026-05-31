@@ -6,10 +6,23 @@ from backend.app.store.models import ChatMessageModel, SessionModel, VideoMetada
 
 def create_session(session_id: str) -> None:
     with db_session() as db:
-        db.add(SessionModel(id=session_id, status="processing"))
+        db.add(
+            SessionModel(
+                id=session_id,
+                status="processing",
+                current_step="Queued",
+                progress_percent=0,
+            )
+        )
 
 
-def update_session_status(session_id: str, status: str, error_message: str | None = None) -> None:
+def update_session_status(
+    session_id: str,
+    status: str,
+    error_message: str | None = None,
+    current_step: str | None = None,
+    progress_percent: int | None = None,
+) -> None:
     with db_session() as db:
         row = db.get(SessionModel, session_id)
         if row is None:
@@ -17,6 +30,19 @@ def update_session_status(session_id: str, status: str, error_message: str | Non
             db.add(row)
         row.status = status
         row.error_message = error_message
+        if current_step is not None:
+            row.current_step = current_step
+        if progress_percent is not None:
+            row.progress_percent = max(0, min(100, progress_percent))
+
+
+def update_session_progress(session_id: str, current_step: str, progress_percent: int) -> None:
+    update_session_status(
+        session_id=session_id,
+        status="processing",
+        current_step=current_step,
+        progress_percent=progress_percent,
+    )
 
 
 def upsert_video_metadata(metadata: dict) -> None:
@@ -72,6 +98,9 @@ def get_session(session_id: str) -> dict | None:
             "session_id": row.id,
             "status": row.status,
             "error_message": row.error_message,
+            "current_step": row.current_step,
+            "progress_percent": row.progress_percent,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
             "metadata": get_video_metadata(session_id),
         }
 

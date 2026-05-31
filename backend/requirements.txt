@@ -4,6 +4,7 @@ python-dotenv
 pydantic
 pydantic-settings
 yt-dlp
+youtube-transcript-api
 faster-whisper
 groq
 qdrant-client[fastembed]

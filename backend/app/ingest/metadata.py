@@ -1,8 +1,11 @@
+import logging
 import re
 from datetime import datetime
 from urllib.parse import urlparse
 
 from yt_dlp import YoutubeDL
+
+logger = logging.getLogger(__name__)
 
 
 def _safe_int(value: object) -> int:
@@ -67,7 +70,14 @@ def _hashtags(info: dict) -> list[str]:
     return unique
 
 
-def scrape_metadata(url: str, session_id: str, video_id: str) -> dict:
+def scrape_metadata(url: str, session_id: str, video_id: str, expected_platform: str | None = None) -> dict:
+    logger.info(
+        "Scraping metadata for Video %s session_id=%s expected_platform=%s url=%s",
+        video_id,
+        session_id,
+        expected_platform or "auto",
+        url,
+    )
     opts = {
         "quiet": True,
         "no_warnings": True,
@@ -95,11 +105,12 @@ def scrape_metadata(url: str, session_id: str, video_id: str) -> dict:
         or info.get("follower_count")
     )
 
-    return {
+    platform = _platform_from(url, info.get("extractor_key"))
+    metadata = {
         "session_id": session_id,
         "video_id": video_id,
         "url": url,
-        "platform": _platform_from(url, info.get("extractor_key")),
+        "platform": platform,
         "creator": str(creator),
         "creator_followers": followers,
         "views": views,
@@ -110,3 +121,16 @@ def scrape_metadata(url: str, session_id: str, video_id: str) -> dict:
         "duration_seconds": _safe_float(info.get("duration")),
         "engagement_rate": engagement_rate,
     }
+    logger.info(
+        "Metadata parsed for Video %s session_id=%s platform=%s creator=%s views=%s likes=%s comments=%s duration=%.0fs engagement_rate=%.4f",
+        video_id,
+        session_id,
+        platform,
+        metadata["creator"],
+        views,
+        likes,
+        comments,
+        metadata["duration_seconds"],
+        engagement_rate,
+    )
+    return metadata

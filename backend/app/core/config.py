@@ -22,13 +22,28 @@ class Settings(BaseSettings):
 
     max_video_seconds: int = Field(default=600, alias="MAX_VIDEO_SECONDS")
     whisper_model_size: str = Field(default="base", alias="WHISPER_MODEL_SIZE")
-    tmp_dir: str = Field(default="tmp", alias="TMP_DIR")
+    tmp_dir: str = Field(default="/private/tmp/creator-rag", alias="TMP_DIR")
 
     cors_origins: str = Field(default="http://localhost:3000", alias="CORS_ORIGINS")
 
     @property
     def cors_origin_list(self) -> list[str]:
-        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        origins = {origin.strip() for origin in self.cors_origins.split(",") if origin.strip()}
+        origins.update(
+            {
+                "http://localhost:3000",
+                "http://localhost:3001",
+                "http://127.0.0.1:3000",
+                "http://127.0.0.1:3001",
+            }
+        )
+        return sorted(origins)
+
+    @property
+    def effective_tmp_dir(self) -> str:
+        if self.tmp_dir.strip() in {"tmp", "./tmp"}:
+            return "/private/tmp/creator-rag"
+        return self.tmp_dir
 
 
 @lru_cache

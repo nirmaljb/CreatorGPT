@@ -52,6 +52,13 @@ def db_session() -> Iterator[Session]:
 
 def init_db() -> None:
     Base.metadata.create_all(bind=get_engine())
+    ensure_session_progress_columns()
+
+
+def ensure_session_progress_columns() -> None:
+    with get_engine().begin() as conn:
+        conn.execute(text("alter table sessions add column if not exists current_step text not null default 'Queued'"))
+        conn.execute(text("alter table sessions add column if not exists progress_percent integer not null default 0"))
 
 
 def health_check() -> bool:

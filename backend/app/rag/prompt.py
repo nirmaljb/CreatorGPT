@@ -66,6 +66,7 @@ def _chunks_block(chunks: list[dict]) -> str:
                     f"video_id: {chunk['video_id']}",
                     f"timestamp: {timestamp}",
                     f"is_hook: {chunk['is_hook']}",
+                    f"transcript_source: {chunk.get('transcript_source', 'unknown')}",
                     f"text: {chunk['text']}",
                 ]
             )
