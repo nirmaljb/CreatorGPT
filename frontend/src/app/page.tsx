@@ -2,6 +2,14 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
+type Platform = "youtube" | "instagram";
+
+type VideoInputState = {
+  video_id: "A" | "B";
+  platform: Platform;
+  url: string;
+};
+
 type VideoMetadata = {
   video_id: "A" | "B";
   url: string;
@@ -35,6 +43,9 @@ type StatusResponse = {
   session_id: string;
   status: "processing" | "ready" | "failed";
   error_message: string | null;
+  current_step: string;
+  progress_percent: number;
+  updated_at: string | null;
   metadata: VideoMetadata[];
 };
 
@@ -101,33 +112,46 @@ function VideoCard({ video }: { video?: VideoMetadata }) {
 }
 
 export default function Home() {
-  const [youtubeUrl, setYoutubeUrl] = useState("");
-  const [instagramUrl, setInstagramUrl] = useState("");
+  const [videoInputs, setVideoInputs] = useState<VideoInputState[]>([
+    { video_id: "A", platform: "youtube", url: "" },
+    { video_id: "B", platform: "instagram", url: "" }
+  ]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [status, setStatus] = useState<StatusResponse["status"] | "idle">("idle");
   const [error, setError] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<VideoMetadata[]>([]);
+  const [currentStep, setCurrentStep] = useState("Idle");
+  const [progressPercent, setProgressPercent] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
 
   const videoA = useMemo(() => metadata.find((item) => item.video_id === "A"), [metadata]);
   const videoB = useMemo(() => metadata.find((item) => item.video_id === "B"), [metadata]);
+  const canIngest = videoInputs.every((video) => video.url.trim().length > 0) && status !== "processing";
+
+  function updateVideoInput(videoId: "A" | "B", patch: Partial<VideoInputState>) {
+    setVideoInputs((current) =>
+      current.map((video) => (video.video_id === videoId ? { ...video, ...patch } : video))
+    );
+  }
 
   async function loadStatus(id: string) {
-    const response = await fetch(`${API_BASE}/status/${id}`);
+    const response = await fetch(`${API_BASE}/status/${id}`, { cache: "no-store" });
     if (!response.ok) {
       throw new Error(`Status request failed: ${response.status}`);
     }
     const data: StatusResponse = await response.json();
     setStatus(data.status);
     setMetadata(data.metadata || []);
+    setCurrentStep(data.current_step || data.status);
+    setProgressPercent(data.progress_percent || 0);
     setError(data.error_message);
     return data;
   }
 
   async function loadMessages(id: string) {
-    const response = await fetch(`${API_BASE}/messages/${id}`);
+    const response = await fetch(`${API_BASE}/messages/${id}`, { cache: "no-store" });
     if (!response.ok) return;
     const data = await response.json();
     setMessages(
@@ -148,23 +172,32 @@ export default function Home() {
 
   useEffect(() => {
     if (!sessionId || status !== "processing") return;
-    const interval = window.setInterval(() => {
+    const delay = progressPercent < 25 ? 2500 : progressPercent < 95 ? 8000 : 5000;
+    const timeout = window.setTimeout(() => {
       loadStatus(sessionId).catch((exc) => setError(String(exc)));
-    }, 2500);
-    return () => window.clearInterval(interval);
-  }, [sessionId, status]);
+    }, delay);
+    return () => window.clearTimeout(timeout);
+  }, [sessionId, status, progressPercent]);
 
   async function handleIngest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setMetadata([]);
     setMessages([]);
+    setCurrentStep("Queued");
+    setProgressPercent(0);
     setStatus("processing");
 
     const response = await fetch(`${API_BASE}/ingest`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ youtube_url: youtubeUrl, instagram_url: instagramUrl })
+      body: JSON.stringify({
+        videos: videoInputs.map((video) => ({
+          video_id: video.video_id,
+          platform: video.platform,
+          url: video.url.trim()
+        }))
+      })
     });
     if (!response.ok) {
       setStatus("idle");
@@ -253,21 +286,49 @@ export default function Home() {
       <header className="topbar">
         <div>
           <p className="eyebrow">Creator RAG Comparator</p>
-          <h1>Compare a YouTube video against an Instagram Reel</h1>
+          <h1>Compare two creator videos</h1>
         </div>
-        <div className={`status ${status}`}>{status}</div>
+        <div className="status-block">
+          <div className={`status ${status}`}>{status}</div>
+          {status === "processing" && (
+            <div className="progress-summary">
+              <div className="progress-label">
+                <span>{currentStep}</span>
+                <span>{progressPercent}%</span>
+              </div>
+              <div className="progress-track">
+                <div className="progress-fill" style={{ width: `${progressPercent}%` }} />
+              </div>
+            </div>
+          )}
+        </div>
       </header>
 
       <form className="ingest" onSubmit={handleIngest}>
-        <label>
-          YouTube URL
-          <input value={youtubeUrl} onChange={(event) => setYoutubeUrl(event.target.value)} placeholder="https://youtube.com/watch?v=..." />
-        </label>
-        <label>
-          Instagram Reel URL
-          <input value={instagramUrl} onChange={(event) => setInstagramUrl(event.target.value)} placeholder="https://www.instagram.com/reel/..." />
-        </label>
-        <button type="submit" disabled={!youtubeUrl || !instagramUrl || status === "processing"}>
+        {videoInputs.map((video) => (
+          <label key={video.video_id}>
+            Video {video.video_id}
+            <div className="url-control">
+              <select
+                value={video.platform}
+                onChange={(event) => updateVideoInput(video.video_id, { platform: event.target.value as Platform })}
+              >
+                <option value="youtube">YouTube</option>
+                <option value="instagram">Instagram</option>
+              </select>
+              <input
+                value={video.url}
+                onChange={(event) => updateVideoInput(video.video_id, { url: event.target.value })}
+                placeholder={
+                  video.platform === "youtube"
+                    ? "https://youtube.com/watch?v=..."
+                    : "https://www.instagram.com/reel/..."
+                }
+              />
+            </div>
+          </label>
+        ))}
+        <button type="submit" disabled={!canIngest}>
           Start ingest
         </button>
       </form>
