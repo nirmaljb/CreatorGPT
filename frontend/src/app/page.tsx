@@ -16,13 +16,18 @@ type VideoMetadata = {
   platform: string;
   creator: string;
   creator_followers: number;
+  creator_followers_available?: boolean;
   views: number;
+  views_available?: boolean;
   likes: number;
+  likes_available?: boolean;
   comments: number;
+  comments_available?: boolean;
   hashtags: string[];
   upload_date: string | null;
   duration_seconds: number;
   engagement_rate: number;
+  engagement_rate_available?: boolean;
   ingest_status?: string;
   video_error_message?: string | null;
   transcript_source?: string;
@@ -62,6 +67,14 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat("en", { notation: value >= 1000000 ? "compact" : "standard" }).format(value);
 }
 
+function formatMetric(value: number, available = true) {
+  return available ? formatNumber(value) : "Unavailable";
+}
+
+function formatEngagement(value: number, available = true) {
+  return available ? `${value.toFixed(2)}%` : "Unavailable";
+}
+
 function formatDuration(seconds: number) {
   const total = Math.max(0, Math.round(seconds || 0));
   const minutes = Math.floor(total / 60);
@@ -97,19 +110,19 @@ function VideoCard({ video }: { video?: VideoMetadata }) {
       <dl className="metrics">
         <div>
           <dt>Views</dt>
-          <dd>{formatNumber(video.views)}</dd>
+          <dd>{formatMetric(video.views, video.views_available ?? true)}</dd>
         </div>
         <div>
           <dt>Likes</dt>
-          <dd>{formatNumber(video.likes)}</dd>
+          <dd>{formatMetric(video.likes, video.likes_available ?? true)}</dd>
         </div>
         <div>
           <dt>Comments</dt>
-          <dd>{formatNumber(video.comments)}</dd>
+          <dd>{formatMetric(video.comments, video.comments_available ?? true)}</dd>
         </div>
         <div>
           <dt>Followers</dt>
-          <dd>{video.creator_followers ? formatNumber(video.creator_followers) : "Unavailable"}</dd>
+          <dd>{formatMetric(video.creator_followers, video.creator_followers_available ?? Boolean(video.creator_followers))}</dd>
         </div>
         <div>
           <dt>Duration</dt>
@@ -117,7 +130,7 @@ function VideoCard({ video }: { video?: VideoMetadata }) {
         </div>
         <div>
           <dt>Engagement</dt>
-          <dd>{video.engagement_rate.toFixed(2)}%</dd>
+          <dd>{formatEngagement(video.engagement_rate, video.engagement_rate_available ?? true)}</dd>
         </div>
       </dl>
       <div className="tags">{video.hashtags.slice(0, 6).map((tag) => <span key={tag}>{tag}</span>)}</div>

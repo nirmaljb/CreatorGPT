@@ -77,6 +77,13 @@ Phase 1 implementation.
 - Reworked `README.md` into a cleaner project entry point with a demo placeholder, documentation map, technology table, high-level pipeline, installation guide, checks, and eval commands.
 - Changed the README high-level pipeline from an ordered list to a Mermaid flowchart.
 - Fixed the README Mermaid diagram by quoting labels that contain braces and HTML line breaks so GitHub can render it.
+- Fixed the assignment eval failure where the "why did A get more engagement" answer could use retrieved chunks as hidden context but cite only metadata.
+- Added mixed-route prompt requirements so comparison answers cite transcript chunks when chunks are retrieved.
+- Added metric availability flags derived from raw metadata so missing Instagram views, engagement rates, and follower counts are shown as `unavailable` instead of being treated as real zeroes.
+- Updated metadata tools, prompt context, eval validation, and frontend metric cards to respect unavailable extractor counts.
+- Updated engagement comparison metadata so a missing view denominator marks the comparison incomplete instead of declaring Video A the winner.
+- Tightened eval validation so unavailable Video B views or engagement cannot pass as `0 views` or `0%`.
+- Tightened citation formatting so prompts and evals require exact source tags instead of wrapper citations like `[source_tag: [Video A metadata]]` or fake tags like `[POSTGRES METADATA TOOL RESULTS]`.
 
 ## Current Next Step
 
@@ -142,3 +149,9 @@ Use `make ci` before PRs and run `python scripts/eval_assignment_questions.py --
 - `make markdown-lint` passed after the README refresh.
 - `make markdown-lint` passed after changing the README high-level pipeline to Mermaid.
 - `make markdown-lint` passed after fixing the README Mermaid label syntax.
+- `backend/.venv/bin/python -m pytest backend/tests/test_prompt.py backend/tests/test_metadata_tools.py backend/tests/test_assignment_eval.py` passed after the mixed-citation and unavailable-metric fixes.
+- `make ci` passed after the mixed-citation and unavailable-metric fixes; backend tests now report 30 selected tests plus the mocked smoke test.
+- `backend/.venv/bin/python -m pytest backend/tests/test_metadata_tools.py backend/tests/test_assignment_eval.py backend/tests/test_prompt.py` passed after marking engagement comparisons incomplete when views are unavailable.
+- `make ci` passed after the incomplete-engagement comparison fix; backend tests now report 31 selected tests plus the mocked smoke test.
+- `backend/.venv/bin/python -m pytest backend/tests/test_prompt.py backend/tests/test_assignment_eval.py` passed after tightening citation formatting.
+- `make ci` passed after tightening citation formatting; backend tests now report 33 selected tests plus the mocked smoke test.

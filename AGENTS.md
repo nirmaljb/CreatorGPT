@@ -98,7 +98,10 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Qdrant Cloud replaces local Docker to reduce local setup friction and demonstrate cloud vector infrastructure.
 - Reranking, hybrid search, Redis, LangSmith, Sentry, auth, and job queues are intentionally out of Phase 1.
 - Responses must cite facts with source tags. Numeric claims should come from Postgres metadata or chunk payloads, not model invention.
-- Missing Instagram metadata is expected. Unknown strings stay `unknown`; missing counts default to `0`; unavailable follower counts should be stated as unavailable when needed.
+- Citation text must use exact source tags such as `[Video A metadata]`; do not emit wrapper citations like `[source_tag: ...]` or non-source tags like `[POSTGRES METADATA TOOL RESULTS]`.
+- Missing Instagram metadata is expected. Unknown strings stay `unknown`; missing counts default to `0` in stored integer columns for compatibility, but availability flags decide whether UI and chat render them as `unavailable`.
+- Engagement-rate comparison is incomplete when a video's view count is unavailable. Do not declare a winner from a missing denominator.
+- Status and chat context expose metric availability flags so missing extractor counts are rendered as `unavailable` instead of treated as real zeroes.
 - Phase 1 uses SQLAlchemy `create_all` at startup instead of Alembic migrations to reduce setup overhead. If schema churn starts, add migrations in a later phase.
 - Ingestion runs as a FastAPI background task. Metadata is processed first for both videos, then per-video transcript/vector work runs concurrently. A production version should move this to a durable queue.
 - Backend startup validates Postgres and Qdrant by creating tables and ensuring the vector collection. This is fail-fast by design when `.env` is missing or cloud services are unavailable.
@@ -106,6 +109,7 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Compare questions that mention both Video A and Video B retrieve chunks from both videos; single-video questions stay filtered to that video.
 - Numeric and creator metadata questions must bypass Qdrant retrieval and use typed Postgres metadata tools only: `get_video_metrics`, `get_creator_info`, `get_engagement_comparison`, and `get_session_video_summary`.
 - Semantic transcript questions use Qdrant retrieval. Mixed comparison questions use the Postgres metadata tools plus Qdrant retrieval.
+- Mixed comparison answers must cite transcript chunk evidence when chunks are retrieved, not only metadata metrics.
 - Assignment evals are run through `scripts/eval_assignment_questions.py`; reusable logic lives in `backend.evals.assignment_eval` for later mocked CI coverage.
 - Required CI runs backend Ruff lint, backend Pytest tests, frontend ESLint, frontend TypeScript typecheck, frontend build, markdown lint, and a provider-mocked smoke test.
 - The frontend uses `fetch` with a POST body and manually parses SSE because native `EventSource` does not support POST request bodies.

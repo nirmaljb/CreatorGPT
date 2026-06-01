@@ -10,6 +10,11 @@ from typing import Any
 
 CITATION_PATTERN = re.compile(r"\[Video [AB](?: metadata|, chunk \d+, \d+:\d\d-\d+:\d\d)\]")
 FOLLOWER_COUNT_PATTERN = re.compile(r"\b\d[\d,]*(?:\.\d+)?\s*followers?\b", re.IGNORECASE)
+INVALID_CITATION_PATTERNS = [
+    re.compile(r"\[source_tag:", re.IGNORECASE),
+    re.compile(r"\[citation:", re.IGNORECASE),
+    re.compile(r"\[POSTGRES METADATA TOOL RESULTS\]", re.IGNORECASE),
+]
 
 ASSIGNMENT_EVALS = [
     {
@@ -43,6 +48,8 @@ ASSIGNMENT_EVALS = [
         "required_chunk_videos": {"A", "B"},
         "require_chunks": True,
         "required_citation_tags": {"[Video A metadata]", "[Video B metadata]"},
+        "required_engagement_videos": {"A", "B"},
+        "required_view_videos": {"A", "B"},
     },
     {
         "id": "improve_b_from_a",
@@ -163,12 +170,23 @@ def _missing_count(value: object) -> bool:
     return value == 0
 
 
+def _metric_available(video: dict[str, Any], available_key: str, value_key: str) -> bool:
+    if available_key in video:
+        return bool(video.get(available_key))
+    return not _missing_count(video.get(value_key))
+
+
 def _streamed_successfully(events: list[dict[str, Any]] | None) -> bool:
     if events is None:
         return True
     if any(event.get("event") == "error" for event in events):
         return False
     return any(event.get("event") == "done" and (event.get("data") or {}).get("ok") is True for event in events)
+
+
+def _video_window(answer: str, video_id: str) -> str:
+    match = re.search(rf"video\s+{video_id}\b(.{{0,120}})", answer, re.IGNORECASE | re.DOTALL)
+    return match.group(0) if match else ""
 
 
 def validate_eval_case(
@@ -217,6 +235,8 @@ def validate_eval_case(
 
     if not CITATION_PATTERN.search(answer):
         failures.append("answer contains no source citation")
+    if any(pattern.search(answer) for pattern in INVALID_CITATION_PATTERNS):
+        failures.append("answer contains an invalid citation wrapper or non-source citation")
 
     source_tags = {source.get("source_tag") for source in sources if source.get("source_tag")}
     if source_tags and not any(tag in answer for tag in source_tags):
@@ -231,8 +251,26 @@ def validate_eval_case(
             failures.append(f"missing Postgres metadata for Video {video_id}")
             continue
         expected_rate = video.get("engagement_rate")
-        if not _answer_contains_number(answer, expected_rate):
+        if not _metric_available(video, "engagement_rate_available", "engagement_rate"):
+            if "unavailable" not in answer.lower():
+                failures.append(f"engagement rate for Video {video_id} is unavailable but answer did not say so")
+            if re.search(r"\b0(?:\.0+)?\s*%", _video_window(answer, video_id)):
+                failures.append(
+                    f"engagement rate for Video {video_id} is unavailable but answer appears to treat it as 0%"
+                )
+        elif not _answer_contains_number(answer, expected_rate):
             failures.append(f"engagement rate for Video {video_id} does not match Postgres value {expected_rate}")
+
+    for video_id in case.get("required_view_videos", set()):
+        video = status_metadata.get(video_id)
+        if not video:
+            failures.append(f"missing Postgres metadata for Video {video_id}")
+            continue
+        if not _metric_available(video, "views_available", "views"):
+            if "unavailable" not in answer.lower():
+                failures.append(f"views for Video {video_id} are unavailable but answer did not say so")
+            if re.search(r"\b0\s+views?\b", _video_window(answer, video_id), re.IGNORECASE):
+                failures.append(f"views for Video {video_id} are unavailable but answer appears to treat them as 0")
 
     creator_video_id = case.get("required_creator_video")
     if creator_video_id:
@@ -248,7 +286,7 @@ def validate_eval_case(
     if follower_video_id:
         video = status_metadata.get(follower_video_id)
         follower_count = (video or {}).get("creator_followers")
-        if _missing_count(follower_count):
+        if not video or not _metric_available(video, "creator_followers_available", "creator_followers"):
             if "unavailable" not in answer.lower():
                 failures.append(
                     f"follower count for Video {follower_video_id} is missing but answer did not say unavailable"

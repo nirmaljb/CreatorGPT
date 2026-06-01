@@ -49,6 +49,65 @@ class AssignmentEvalTests(unittest.TestCase):
 
         self.assertIn("engagement rate for Video B does not match Postgres value 0.75", failures)
 
+    def test_unavailable_engagement_must_be_stated_as_unavailable(self) -> None:
+        case = ASSIGNMENT_EVALS[0]
+        sources = [
+            {"type": "metadata", "video_id": "A", "source_tag": "[Video A metadata]"},
+            {"type": "metadata", "video_id": "B", "source_tag": "[Video B metadata]"},
+        ]
+        metadata = {
+            "A": {"engagement_rate": 1.25, "engagement_rate_available": True},
+            "B": {"engagement_rate": 0.0, "engagement_rate_available": False},
+        }
+
+        failures = validate_eval_case(
+            case,
+            "Video A is 1.25% [Video A metadata]. Video B is 0% [Video B metadata].",
+            sources,
+            status_metadata=metadata,
+            events=[{"event": "done", "data": {"ok": True}}],
+        )
+
+        self.assertIn("engagement rate for Video B is unavailable but answer did not say so", failures)
+
+    def test_unavailable_views_must_not_be_treated_as_zero(self) -> None:
+        case = ASSIGNMENT_EVALS[3]
+        sources = [
+            {"type": "metadata", "video_id": "A", "source_tag": "[Video A metadata]"},
+            {"type": "metadata", "video_id": "B", "source_tag": "[Video B metadata]"},
+            {
+                "type": "chunk",
+                "video_id": "A",
+                "start_time": 0.0,
+                "source_tag": "[Video A, chunk 0, 00:00-00:04]",
+            },
+            {
+                "type": "chunk",
+                "video_id": "B",
+                "start_time": 0.0,
+                "source_tag": "[Video B, chunk 0, 00:00-00:04]",
+            },
+        ]
+        metadata = {
+            "A": {"engagement_rate": 1.25, "engagement_rate_available": True, "views": 1000, "views_available": True},
+            "B": {"engagement_rate": 0.0, "engagement_rate_available": False, "views": 0, "views_available": False},
+        }
+
+        failures = validate_eval_case(
+            case,
+            (
+                "Video A got more because it had 1000 views [Video A metadata] and "
+                "Video B had 0 views [Video B metadata]. "
+                "A hook [Video A, chunk 0, 00:00-00:04], B hook [Video B, chunk 0, 00:00-00:04]."
+            ),
+            sources,
+            status_metadata=metadata,
+            events=[{"event": "done", "data": {"ok": True}}],
+        )
+
+        self.assertIn("views for Video B are unavailable but answer did not say so", failures)
+        self.assertIn("views for Video B are unavailable but answer appears to treat them as 0", failures)
+
     def test_missing_follower_count_must_be_unavailable(self) -> None:
         case = ASSIGNMENT_EVALS[1]
         sources = [{"type": "metadata", "video_id": "B", "source_tag": "[Video B metadata]"}]
@@ -79,6 +138,21 @@ class AssignmentEvalTests(unittest.TestCase):
         )
 
         self.assertIn("response did not stream to a successful done event", failures)
+
+    def test_rejects_invalid_citation_wrappers(self) -> None:
+        case = ASSIGNMENT_EVALS[1]
+        sources = [{"type": "metadata", "video_id": "B", "source_tag": "[Video B metadata]"}]
+        metadata = {"B": {"creator": "demo_creator", "creator_followers": 123}}
+
+        failures = validate_eval_case(
+            case,
+            "Video B is by demo_creator with 123 followers [source_tag: [Video B metadata]].",
+            sources,
+            status_metadata=metadata,
+            events=[{"event": "done", "data": {"ok": True}}],
+        )
+
+        self.assertIn("answer contains an invalid citation wrapper or non-source citation", failures)
 
     def test_hook_eval_rejects_non_hook_chunks(self) -> None:
         case = ASSIGNMENT_EVALS[2]

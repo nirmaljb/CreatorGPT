@@ -30,7 +30,7 @@ Out of scope for this phase:
 - Why did Video A get more engagement than Video B?
 - Suggest improvements for B based on what worked in A.
 
-The eval uses the existing streaming `/chat` API. It validates that responses stream to a successful done event, answers are non-empty and cited, numeric answers match Postgres-backed status metadata, missing follower counts are stated as unavailable, metadata-only questions return metadata sources without transcript chunks, hook questions use first-5-second chunk sources, and mixed comparison questions include transcript evidence from both videos.
+The eval uses the existing streaming `/chat` API. It validates that responses stream to a successful done event, answers are non-empty and cited, numeric answers match available Postgres-backed status metadata, unavailable metrics are stated as unavailable, metadata-only questions return metadata sources without transcript chunks, hook questions use first-5-second chunk sources, and mixed comparison questions include transcript evidence from both videos.
 
 Run it with:
 

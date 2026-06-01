@@ -89,7 +89,21 @@ def update_video_ingest_status(
             row.transcript_cached = transcript_cached
 
 
+def _raw_has_value(raw_metadata: dict | None, *keys: str) -> bool:
+    if not raw_metadata:
+        return False
+    return any(raw_metadata.get(key) is not None for key in keys)
+
+
 def _video_to_dict(row: VideoMetadataModel) -> dict:
+    raw_metadata = row.raw_metadata if isinstance(row.raw_metadata, dict) else None
+    views_available = _raw_has_value(raw_metadata, "view_count")
+    followers_available = _raw_has_value(
+        raw_metadata,
+        "uploader_subscriber_count",
+        "channel_follower_count",
+        "follower_count",
+    )
     return {
         "session_id": row.session_id,
         "video_id": row.video_id,
@@ -97,13 +111,18 @@ def _video_to_dict(row: VideoMetadataModel) -> dict:
         "platform": row.platform,
         "creator": row.creator,
         "creator_followers": row.creator_followers,
+        "creator_followers_available": followers_available,
         "views": row.views,
+        "views_available": views_available,
         "likes": row.likes,
+        "likes_available": _raw_has_value(raw_metadata, "like_count"),
         "comments": row.comments,
+        "comments_available": _raw_has_value(raw_metadata, "comment_count"),
         "hashtags": row.hashtags or [],
         "upload_date": row.upload_date,
         "duration_seconds": row.duration_seconds,
         "engagement_rate": row.engagement_rate,
+        "engagement_rate_available": views_available and row.views > 0,
         "ingest_status": row.ingest_status,
         "video_error_message": row.video_error_message,
         "transcript_source": row.transcript_source,

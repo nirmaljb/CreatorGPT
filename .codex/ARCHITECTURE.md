@@ -65,6 +65,8 @@
 - `metadata_cached`
 - `transcript_cached`
 
+Status responses derive metric availability flags from `raw_metadata` so missing extractor fields can be shown as unavailable without changing the stored integer columns. Engagement-rate comparisons are marked incomplete when any video's view count is unavailable.
+
 ### `extraction_cache`
 
 - `cache_key`
@@ -121,7 +123,8 @@ Payload indexes are created for `session_id`, `video_id`, and `is_hook`.
 - `get_session_video_summary(session_id)`: Postgres metadata tool for broad metadata summaries.
 - Numeric and creator metadata questions bypass Qdrant entirely.
 - Transcript and hook questions use Qdrant retrieval.
-- Mixed comparison questions combine metadata tool results with Qdrant chunks.
+- Mixed comparison questions combine metadata tool results with Qdrant chunks and require transcript chunk citations when chunks were retrieved.
+- Answers must cite exact source tags only, such as `[Video A metadata]` or `[Video B, chunk 0, 00:00-00:16]`.
 
 ## Quality Gates
 
