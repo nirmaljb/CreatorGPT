@@ -1,5 +1,5 @@
-import uuid
 import logging
+import uuid
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,7 +12,8 @@ from backend.app.ingest.pipeline import ingest_session
 from backend.app.rag.service import stream_rag_response
 from backend.app.store import database
 from backend.app.store.postgres import create_session, get_chat_messages, get_session
-from backend.app.store.vector import ensure_collection, health_check as qdrant_health_check
+from backend.app.store.vector import ensure_collection
+from backend.app.store.vector import health_check as qdrant_health_check
 
 configure_logging()
 settings = get_settings()

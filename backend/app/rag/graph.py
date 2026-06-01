@@ -97,7 +97,6 @@ def _has_any_term(query: str, terms: set[str]) -> bool:
 def classify_query(query: str) -> str:
     has_metadata = _has_any_term(query, METADATA_TERMS)
     has_transcript = _has_any_term(query, TRANSCRIPT_TERMS)
-    lowered = query.lower()
     video_ids = _detect_video_ids(query)
     if len(video_ids) == 2 and has_transcript:
         return "mixed"
@@ -137,7 +136,22 @@ def run_metadata_tools(state: CreatorSessionState) -> CreatorSessionState:
         results.append({"tool": "get_engagement_comparison", "result": get_engagement_comparison(session_id)})
     if any(term in lowered for term in ("creator", "follower", "followers")):
         results.append({"tool": "get_creator_info", "result": _creator_info_results(session_id, video_ids)})
-    if any(term in lowered for term in ("view", "views", "like", "likes", "comment", "comments", "metric", "metrics", "count", "counts", "duration")):
+    if any(
+        term in lowered
+        for term in (
+            "view",
+            "views",
+            "like",
+            "likes",
+            "comment",
+            "comments",
+            "metric",
+            "metrics",
+            "count",
+            "counts",
+            "duration",
+        )
+    ):
         results.append({"tool": "get_video_metrics", "result": get_video_metrics(session_id)})
     if not results:
         results.append({"tool": "get_session_video_summary", "result": get_session_video_summary(session_id)})

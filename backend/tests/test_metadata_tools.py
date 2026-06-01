@@ -8,7 +8,6 @@ from backend.app.rag.metadata_tools import (
     get_video_metrics,
 )
 
-
 VIDEO_ROWS = [
     {
         "video_id": "A",

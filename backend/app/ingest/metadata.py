@@ -56,9 +56,7 @@ def _hashtags(info: dict) -> list[str]:
         text = str(tag).strip()
         normalized.append(text if text.startswith("#") else f"#{text}")
 
-    text_fields = " ".join(
-        str(info.get(field) or "") for field in ("title", "description", "fulltitle")
-    )
+    text_fields = " ".join(str(info.get(field) or "") for field in ("title", "description", "fulltitle"))
     for match in re.findall(r"#([\w\d_]+)", text_fields):
         normalized.append(f"#{match}")
 
@@ -113,17 +111,9 @@ def normalize_metadata(
     comments = _safe_int(info.get("comment_count"))
     engagement_rate = round(((likes + comments) / views) * 100, 4) if views else 0.0
 
-    creator = (
-        info.get("uploader")
-        or info.get("channel")
-        or info.get("creator")
-        or info.get("artist")
-        or "unknown"
-    )
+    creator = info.get("uploader") or info.get("channel") or info.get("creator") or info.get("artist") or "unknown"
     followers = _safe_int(
-        info.get("uploader_subscriber_count")
-        or info.get("channel_follower_count")
-        or info.get("follower_count")
+        info.get("uploader_subscriber_count") or info.get("channel_follower_count") or info.get("follower_count")
     )
 
     metadata = {
@@ -149,7 +139,8 @@ def normalize_metadata(
         "transcript_cached": False,
     }
     logger.info(
-        "Metadata parsed for Video %s session_id=%s platform=%s creator=%s views=%s likes=%s comments=%s duration=%.0fs engagement_rate=%.4f",
+        "Metadata parsed for Video %s session_id=%s platform=%s creator=%s "
+        "views=%s likes=%s comments=%s duration=%.0fs engagement_rate=%.4f",
         video_id,
         session_id,
         platform,

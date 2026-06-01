@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install backend dependencies
+        run: python -m pip install -r backend/requirements-dev.txt
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Backend lint
+        run: make backend-lint
+        env:
+          PYTHONWARNINGS: ignore
+
+      - name: Backend tests
+        run: make backend-tests
+
+      - name: Frontend lint
+        run: make frontend-lint
+
+      - name: Frontend typecheck
+        run: make frontend-typecheck
+
+      - name: Frontend build
+        run: make frontend-build
+
+      - name: Markdown lint
+        run: make markdown-lint
+
+      - name: Mocked smoke test
+        run: make mocked-smoke

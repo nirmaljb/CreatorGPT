@@ -80,7 +80,9 @@
 ### Milestones
 
 - Add provider-mocked smoke tests.
-- Add markdown linting and CI.
+- Add root `Makefile` targets for backend lint/tests, frontend lint/typecheck/build, markdown lint, and mocked smoke tests.
+- Add pre-commit, Ruff, Pytest, markdown lint, PR template, and GitHub Actions CI.
+- Keep required CI provider-mocked only; real Groq, Qdrant Cloud, Neon, YouTube, and Instagram checks stay manual or nightly.
 - Finalize README, architecture notes, cost/scaling notes, and Loom script.
 - Run clean-clone demo rehearsal before recording.
 
@@ -88,5 +90,6 @@
 
 - Clean clone can install, configure env, and run.
 - Mocked tests pass without paid providers.
+- CI runs backend lint, backend tests, frontend lint, frontend typecheck, frontend build, markdown lint, and mocked smoke tests.
 - Loom script explains cost, scaling, quality tradeoffs, and fallback paths.
 - Final demo has no known blocking bugs.

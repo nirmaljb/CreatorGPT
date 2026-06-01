@@ -7,7 +7,9 @@ Phase 4 hardens the project for final review, clean setup, and Loom recording.
 Included in this phase:
 
 - Add provider-mocked smoke tests.
-- Add markdown linting and CI.
+- Add root Makefile targets for local and CI checks.
+- Add pre-commit, Ruff, Pytest, frontend lint/typecheck/build checks, markdown linting, PR template, and GitHub Actions CI.
+- Keep required CI independent of real Groq, Qdrant Cloud, Neon, YouTube, and Instagram credentials.
 - Finalize README instructions.
 - Finalize architecture notes.
 - Add cost and scaling notes for 1000 creators per day.
@@ -19,3 +21,17 @@ Out of scope for this phase:
 - Building new product features unrelated to the assignment checklist.
 - Full production deployment automation.
 - Multi-tenant auth unless explicitly required before submission.
+
+## Current CI Flow
+
+`make ci` runs the required local and GitHub Actions checks:
+
+- `make backend-lint`
+- `make backend-tests`
+- `make frontend-lint`
+- `make frontend-typecheck`
+- `make frontend-build`
+- `make markdown-lint`
+- `make mocked-smoke`
+
+The mocked smoke test patches API dependencies and verifies ingest, status, and streamed chat behavior without calling Groq, Qdrant Cloud, Neon, YouTube, or Instagram.

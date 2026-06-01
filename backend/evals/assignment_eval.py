@@ -8,7 +8,6 @@ import urllib.request
 from dataclasses import asdict, dataclass
 from typing import Any
 
-
 CITATION_PATTERN = re.compile(r"\[Video [AB](?: metadata|, chunk \d+, \d+:\d\d-\d+:\d\d)\]")
 FOLLOWER_COUNT_PATTERN = re.compile(r"\b\d[\d,]*(?:\.\d+)?\s*followers?\b", re.IGNORECASE)
 
@@ -118,11 +117,7 @@ def parse_sse(raw: str) -> list[dict[str, Any]]:
 
 
 def _metadata_by_video(status: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return {
-        str(video.get("video_id")): video
-        for video in status.get("metadata", [])
-        if video.get("video_id")
-    }
+    return {str(video.get("video_id")): video for video in status.get("metadata", []) if video.get("video_id")}
 
 
 def _number_variants(value: object) -> set[str]:
@@ -212,9 +207,7 @@ def validate_eval_case(
             failures.append("answer did not cite any returned transcript chunk source")
 
     if case.get("require_hook_chunks"):
-        non_hook_sources = [
-            source for source in chunk_sources if float(source.get("start_time") or 0.0) >= 5.0
-        ]
+        non_hook_sources = [source for source in chunk_sources if float(source.get("start_time") or 0.0) >= 5.0]
         if non_hook_sources:
             failures.append("hook eval returned chunk sources starting at or after 5 seconds")
 
@@ -239,9 +232,7 @@ def validate_eval_case(
             continue
         expected_rate = video.get("engagement_rate")
         if not _answer_contains_number(answer, expected_rate):
-            failures.append(
-                f"engagement rate for Video {video_id} does not match Postgres value {expected_rate}"
-            )
+            failures.append(f"engagement rate for Video {video_id} does not match Postgres value {expected_rate}")
 
     creator_video_id = case.get("required_creator_video")
     if creator_video_id:

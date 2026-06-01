@@ -83,7 +83,8 @@ async def load_or_extract_metadata(
         if cache_entry and cache_entry.get("normalized_metadata"):
             transcript_cached = _cache_has_transcript(cache_entry)
             logger.info(
-                "Extraction cache hit for metadata Video %s session_id=%s platform=%s transcript_cached=%s cache_key=%s",
+                "Extraction cache hit for metadata Video %s session_id=%s "
+                "platform=%s transcript_cached=%s cache_key=%s",
                 video_id,
                 session_id,
                 platform,

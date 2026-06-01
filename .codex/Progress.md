@@ -69,10 +69,15 @@ Phase 1 implementation.
 - Added eval validation for streaming success, non-empty cited answers, source routing, Postgres-backed numeric values, unavailable missing follower counts, early hook chunks, and mixed comparison transcript evidence from both videos.
 - Tightened Video A/B routing detection so "Suggest improvements for B based on what worked in A" is treated as a mixed comparison and retrieves chunks for both videos.
 - Documented the assignment eval command in `README.md` and `docs/phase/phase-2.md`, and recorded the eval-first workflow in `AGENTS.md` and `.codex/PLANS.md`.
+- Added a root `Makefile` with CI-equivalent targets for backend lint/tests, frontend lint/typecheck/build, markdown lint, and a mocked smoke test.
+- Added backend dev tooling config: `backend/requirements-dev.txt`, `pyproject.toml` for Pytest/Ruff, and `.pre-commit-config.yaml` local hooks.
+- Added frontend ESLint and markdown lint dependencies/config, plus `lint`, `typecheck`, and `lint:md` scripts.
+- Added `.github/workflows/ci.yml` and `.github/pull_request_template.md` so required CI is provider-mocked and does not require Groq, Qdrant Cloud, Neon, YouTube, or Instagram.
+- Added `backend/tests/test_mocked_smoke.py` to patch API dependencies and verify ingest -> status -> streamed chat without external providers.
 
 ## Current Next Step
 
-Run `python scripts/eval_assignment_questions.py --session-id <id>` against a completed YouTube + Instagram session before making further retrieval, chunking, embedding, or routing optimizations.
+Use `make ci` before PRs and run `python scripts/eval_assignment_questions.py --session-id <id>` against a completed YouTube + Instagram session before making further retrieval, chunking, embedding, or routing optimizations.
 
 ## Known Issues
 
@@ -122,3 +127,12 @@ Run `python scripts/eval_assignment_questions.py --session-id <id>` against a co
 - `backend/.venv/bin/python -m unittest discover backend/tests` passed; 26 tests total.
 - `backend/.venv/bin/python scripts/eval_assignment_questions.py --help` passed.
 - `git diff --check` passed after the eval changes.
+- `backend/.venv/bin/python -m pip install -r backend/requirements-dev.txt` passed after network escalation to install `pytest`, `ruff`, and `pre-commit`.
+- `npm install` in `frontend/` passed after network escalation and updated `frontend/package-lock.json` for ESLint and markdown lint dependencies.
+- `npm ci` in `frontend/` passed after the lockfile update.
+- `make backend-lint` passed with Ruff check and Ruff format check.
+- `make backend-tests` passed with 26 provider-mocked/unit tests selected and 1 smoke test deselected.
+- `make mocked-smoke` passed; the smoke test patches FastAPI dependencies and does not call real providers.
+- `make frontend-lint`, `make frontend-typecheck`, `make frontend-build`, and `make markdown-lint` passed.
+- `make ci` passed end to end.
+- `PRE_COMMIT_HOME=/private/tmp/creator-rag-pre-commit backend/.venv/bin/pre-commit run --all-files` passed. The explicit cache path avoids sandbox writes to `~/.cache/pre-commit`.

@@ -1,0 +1,22 @@
+[tool.pytest.ini_options]
+addopts = "-ra"
+markers = [
+  "smoke: provider-mocked smoke tests that exercise API flow without real external services",
+]
+pythonpath = ["."]
+testpaths = ["backend/tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = [
+  "frontend/.next",
+  "frontend/node_modules",
+  "tmp",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.format]
+quote-style = "double"

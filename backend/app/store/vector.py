@@ -4,8 +4,8 @@ import uuid
 
 from fastembed import TextEmbedding
 from qdrant_client import QdrantClient
-from qdrant_client.http.exceptions import UnexpectedResponse
 from qdrant_client.http import models as qm
+from qdrant_client.http.exceptions import UnexpectedResponse
 
 from backend.app.core.config import get_settings
 
@@ -24,7 +24,9 @@ def get_qdrant_client() -> QdrantClient:
                 settings = get_settings()
                 if not settings.qdrant_url:
                     raise RuntimeError("QDRANT_URL is not configured")
-                logger.info("Creating Qdrant client url=%s collection=%s", settings.qdrant_url, settings.qdrant_collection)
+                logger.info(
+                    "Creating Qdrant client url=%s collection=%s", settings.qdrant_url, settings.qdrant_collection
+                )
                 _client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key or None)
     return _client
 

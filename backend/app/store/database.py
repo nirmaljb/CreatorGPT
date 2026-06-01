@@ -66,7 +66,10 @@ def ensure_video_ingestion_columns() -> None:
     with get_engine().begin() as conn:
         conn.execute(text("alter table video_metadata add column if not exists raw_metadata jsonb"))
         conn.execute(
-            text("alter table video_metadata add column if not exists ingest_status varchar(32) not null default 'queued'")
+            text(
+                "alter table video_metadata "
+                "add column if not exists ingest_status varchar(32) not null default 'queued'"
+            )
         )
         conn.execute(text("alter table video_metadata add column if not exists video_error_message text"))
         conn.execute(

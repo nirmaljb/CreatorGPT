@@ -123,6 +123,12 @@ Payload indexes are created for `session_id`, `video_id`, and `is_hook`.
 - Transcript and hook questions use Qdrant retrieval.
 - Mixed comparison questions combine metadata tool results with Qdrant chunks.
 
+## Quality Gates
+
+- `make ci` is the local equivalent of required GitHub Actions checks.
+- Required CI runs backend Ruff lint, backend Pytest tests, frontend ESLint, frontend TypeScript typecheck, frontend build, markdown lint, and a provider-mocked smoke test.
+- Required CI must not call real Groq, Qdrant Cloud, Neon, YouTube, or Instagram providers. Real-provider checks belong in manual demo runs or a later nightly workflow.
+
 ## Auth
 
 No auth in Phase 1. This is a single-user assignment demo. Production would add tenant/user auth before exposing stored sessions.

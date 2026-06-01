@@ -15,7 +15,9 @@ class RagGraphRoutingTests(unittest.TestCase):
         with patch("backend.app.rag.graph.retrieve") as mocked_retrieve:
             mocked_retrieve.side_effect = lambda **kwargs: [kwargs]
 
-            state = retrieve_chunks({"session_id": "session-1", "query": "Compare Video A and Video B", "route": "mixed"})
+            state = retrieve_chunks(
+                {"session_id": "session-1", "query": "Compare Video A and Video B", "route": "mixed"}
+            )
 
         self.assertEqual([chunk["video_id"] for chunk in state["chunks"]], ["A", "B"])
         self.assertEqual(mocked_retrieve.call_count, 2)

@@ -36,6 +36,23 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## Local Checks
+
+Install development tooling:
+
+```bash
+backend/.venv/bin/python -m pip install -r backend/requirements-dev.txt
+cd frontend && npm ci
+```
+
+Run the same checks as CI:
+
+```bash
+make ci
+```
+
+The required CI path uses provider-mocked tests only. Real Groq, Qdrant Cloud, Neon, YouTube, and Instagram checks are manual or nightly-only.
+
 ## Assignment Evals
 
 After ingesting a YouTube + Instagram session and waiting for `completed`, run the assignment question evals:

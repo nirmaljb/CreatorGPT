@@ -6,7 +6,6 @@ from yt_dlp.utils import download_range_func
 
 from backend.app.core.config import get_settings
 
-
 logger = logging.getLogger(__name__)
 
 
