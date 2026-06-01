@@ -1,3 +1,4 @@
+import re
 from typing import TypedDict
 
 from langgraph.graph import END, StateGraph
@@ -78,6 +79,8 @@ def _detect_video_ids(query: str) -> set[str]:
         video_ids.add("A")
     if "video b" in lowered:
         video_ids.add("B")
+    if re.search(r"\bA\b", query) and re.search(r"\bB\b", query):
+        video_ids.update({"A", "B"})
     return video_ids
 
 
@@ -95,7 +98,8 @@ def classify_query(query: str) -> str:
     has_metadata = _has_any_term(query, METADATA_TERMS)
     has_transcript = _has_any_term(query, TRANSCRIPT_TERMS)
     lowered = query.lower()
-    if ("compare" in lowered or "comparison" in lowered) and len(_detect_video_ids(query)) == 2:
+    video_ids = _detect_video_ids(query)
+    if len(video_ids) == 2 and has_transcript:
         return "mixed"
     if has_metadata and has_transcript:
         return "mixed"

@@ -7,6 +7,7 @@ from backend.app.rag.graph import _detect_video_ids, classify_query, retrieve_ch
 class RagGraphRoutingTests(unittest.TestCase):
     def test_detects_both_videos_when_comparing(self) -> None:
         self.assertEqual(_detect_video_ids("Compare Video A and Video B"), {"A", "B"})
+        self.assertEqual(_detect_video_ids("Suggest improvements for B based on what worked in A."), {"A", "B"})
         self.assertEqual(_detect_video_ids("What happens in Video B?"), {"B"})
         self.assertEqual(_detect_video_ids("Summarize the transcript"), set())
 
@@ -46,6 +47,7 @@ class RagGraphRoutingTests(unittest.TestCase):
 
     def test_mixed_question_uses_vector_retrieval(self) -> None:
         self.assertEqual(classify_query("Compare Video A and Video B using transcript evidence"), "mixed")
+        self.assertEqual(classify_query("Suggest improvements for B based on what worked in A."), "mixed")
 
         with patch("backend.app.rag.graph.retrieve") as mocked_retrieve:
             mocked_retrieve.side_effect = lambda **kwargs: [kwargs]

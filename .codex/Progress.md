@@ -64,10 +64,15 @@ Phase 1 implementation.
 - Bumped extraction cache version for transcript provider changes so older capped-caption cache entries are not reused.
 - Replaced local `faster-whisper` transcription with Groq `whisper-large-v3` transcription and removed the local dependency/config.
 - Bumped extraction cache version to `extract-v3` so older local-Whisper transcript cache entries are not reused.
+- Added `scripts/eval_assignment_questions.py`, a small assignment eval runner that asks the five required demo questions against a completed session through the streaming `/chat` API.
+- Added reusable eval logic in `backend.evals.assignment_eval` for later mocked CI coverage.
+- Added eval validation for streaming success, non-empty cited answers, source routing, Postgres-backed numeric values, unavailable missing follower counts, early hook chunks, and mixed comparison transcript evidence from both videos.
+- Tightened Video A/B routing detection so "Suggest improvements for B based on what worked in A" is treated as a mixed comparison and retrieves chunks for both videos.
+- Documented the assignment eval command in `README.md` and `docs/phase/phase-2.md`, and recorded the eval-first workflow in `AGENTS.md` and `.codex/PLANS.md`.
 
 ## Current Next Step
 
-Use `.codex/PLANS.md` for the next large task, likely Phase 2 grounded intelligence.
+Run `python scripts/eval_assignment_questions.py --session-id <id>` against a completed YouTube + Instagram session before making further retrieval, chunking, embedding, or routing optimizations.
 
 ## Known Issues
 
@@ -112,3 +117,8 @@ Use `.codex/PLANS.md` for the next large task, likely Phase 2 grounded intellige
 - After the compare-query routing fix, chat on cached session `4920d31a-0ee2-4d00-8b5b-e61d3e7a470c` returned source events containing both Video A and Video B transcript chunks.
 - Numeric chat smoke test on cached session `4920d31a-0ee2-4d00-8b5b-e61d3e7a470c` for engagement rates returned only metadata sources and produced no Qdrant retrieval log.
 - Semantic chat smoke test on the same session for "What does Video B discuss?" retrieved 3 Video B chunks from Qdrant and streamed transcript citations.
+- `backend/.venv/bin/python -m compileall backend/app backend/evals backend/tests scripts` passed after adding the assignment eval runner.
+- `backend/.venv/bin/python -m unittest backend.tests.test_assignment_eval backend.tests.test_rag_graph` passed; 14 tests covered eval validation and A/B routing.
+- `backend/.venv/bin/python -m unittest discover backend/tests` passed; 26 tests total.
+- `backend/.venv/bin/python scripts/eval_assignment_questions.py --help` passed.
+- `git diff --check` passed after the eval changes.

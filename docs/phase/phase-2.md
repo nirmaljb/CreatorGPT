@@ -19,3 +19,23 @@ Out of scope for this phase:
 - Multi-user auth.
 - Production monitoring.
 - Full hybrid search or reranking unless eval results prove it is necessary.
+
+## Current Eval Harness
+
+`backend.evals.assignment_eval` runs the assignment's five required questions against a completed backend session:
+
+- What is the engagement rate of each video?
+- Who is the creator of Video B and what is their follower count?
+- Compare the hooks in the first 5 seconds.
+- Why did Video A get more engagement than Video B?
+- Suggest improvements for B based on what worked in A.
+
+The eval uses the existing streaming `/chat` API. It validates that responses stream to a successful done event, answers are non-empty and cited, numeric answers match Postgres-backed status metadata, missing follower counts are stated as unavailable, metadata-only questions return metadata sources without transcript chunks, hook questions use first-5-second chunk sources, and mixed comparison questions include transcript evidence from both videos.
+
+Run it with:
+
+```bash
+backend/.venv/bin/python scripts/eval_assignment_questions.py \
+  --api-base http://127.0.0.1:8000 \
+  --session-id <completed-session-id>
+```

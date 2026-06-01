@@ -36,6 +36,18 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## Assignment Evals
+
+After ingesting a YouTube + Instagram session and waiting for `completed`, run the assignment question evals:
+
+```bash
+backend/.venv/bin/python scripts/eval_assignment_questions.py \
+  --api-base http://127.0.0.1:8000 \
+  --session-id <completed-session-id>
+```
+
+The eval asks the five required questions, checks that responses streamed successfully and contain citations, verifies numeric answers against Postgres-backed status metadata, and fails if metadata-only questions return transcript chunks, missing follower counts are invented, or hook questions cite chunks outside the first 5 seconds.
+
 ## Required Environment
 
 Set these in `.env` before running the backend:

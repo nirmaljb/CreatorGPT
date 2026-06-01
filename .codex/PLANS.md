@@ -49,7 +49,7 @@
 - Use transcript retrieval only for semantic and recommendation questions.
 - Restrict hook comparison to first-5-second chunks.
 - Add citation validation.
-- Add an eval script for the assignment's expected question set.
+- Add an eval script for the assignment's expected question set before making further retrieval/chunking changes.
 
 ### Acceptance Criteria
 

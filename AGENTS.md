@@ -68,6 +68,7 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 ## Developer Workflow
 - All meaningful changes must update `Progress.md`.
 - All architectural/provider/schema changes must update `Agents.md` and the corresponding docs such as `ARCHITECTURE.md`, `PLANS.md`, `PRODUCT_SPEC.md`
+- Run `python scripts/eval_assignment_questions.py --session-id <id>` before making retrieval, chunking, embedding, or routing optimizations so changes are measured against the required questions.
 - External services must be abstracted behind provider wrappers so tests do not require Groq, Neon, Qdrant Cloud, YouTube, or Instagram.
 
 
@@ -102,6 +103,7 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Compare questions that mention both Video A and Video B retrieve chunks from both videos; single-video questions stay filtered to that video.
 - Numeric and creator metadata questions must bypass Qdrant retrieval and use typed Postgres metadata tools only: `get_video_metrics`, `get_creator_info`, `get_engagement_comparison`, and `get_session_video_summary`.
 - Semantic transcript questions use Qdrant retrieval. Mixed comparison questions use the Postgres metadata tools plus Qdrant retrieval.
+- Assignment evals are run through `scripts/eval_assignment_questions.py`; reusable logic lives in `backend.evals.assignment_eval` for later mocked CI coverage.
 - The frontend uses `fetch` with a POST body and manually parses SSE because native `EventSource` does not support POST request bodies.
 - Frontend config pins `outputFileTracingRoot` to the frontend directory because this machine has another lockfile above the repo and Next.js otherwise infers the wrong root.
 - Downloaded audio files are temporary and are deleted after ingestion finishes or fails.
