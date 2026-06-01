@@ -129,8 +129,10 @@ Payload indexes are created for `session_id`, `video_id`, and `is_hook`.
 - `METADATA_ONLY` bypasses Qdrant entirely.
 - `TRANSCRIPT_ONLY` uses Qdrant transcript retrieval.
 - `HOOK_COMPARISON` uses Qdrant retrieval with the `is_hook=true` payload filter.
-- `MIXED_COMPARISON` combines metadata tool results with Qdrant chunks and requires transcript chunk citations when chunks were retrieved.
-- `IMPROVEMENT_SUGGESTION` retrieves targeted Video A evidence for what worked and Video B evidence for improvement opportunities.
+- Named retrieval policies are used instead of one global `top_k` search: `hook_retrieval`, `video_a_retrieval`, `video_b_retrieval`, `comparison_retrieval`, and `metadata_augmented_retrieval`.
+- `MIXED_COMPARISON` combines metadata tool results with balanced Qdrant chunks and requires transcript chunk citations when chunks were retrieved.
+- `IMPROVEMENT_SUGGESTION` retrieves `top_k=4` Video A evidence for what worked and `top_k=4` Video B evidence for improvement opportunities.
+- `comparison_retrieval` retrieves `top_k=4` from Video A and `top_k=4` from Video B, then merges the context.
 - `FOLLOW_UP` resolves obvious references such as "their", "that video", and "what about B" from recent chat history, then re-routes.
 - Answers must cite exact source tags only, such as `[Video A metadata]` or `[Video B, chunk 0, 00:00-00:16]`.
 

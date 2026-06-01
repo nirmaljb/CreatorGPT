@@ -22,8 +22,16 @@ MIXED_COMPARISON = "MIXED_COMPARISON"
 IMPROVEMENT_SUGGESTION = "IMPROVEMENT_SUGGESTION"
 FOLLOW_UP = "FOLLOW_UP"
 
+HOOK_RETRIEVAL = "hook_retrieval"
+VIDEO_A_RETRIEVAL = "video_a_retrieval"
+VIDEO_B_RETRIEVAL = "video_b_retrieval"
+COMPARISON_RETRIEVAL = "comparison_retrieval"
+METADATA_AUGMENTED_RETRIEVAL = "metadata_augmented_retrieval"
+
 METADATA_TOOL_ROUTES = {METADATA_ONLY, MIXED_COMPARISON, IMPROVEMENT_SUGGESTION}
 CHUNK_ROUTES = {TRANSCRIPT_ONLY, HOOK_COMPARISON, MIXED_COMPARISON, IMPROVEMENT_SUGGESTION}
+BALANCED_TOP_K_PER_VIDEO = 4
+DEFAULT_TRANSCRIPT_TOP_K = 6
 
 METADATA_TERMS = {
     "engagement",
@@ -95,6 +103,7 @@ class CreatorSessionState(TypedDict, total=False):
     metadata_tool_results: list[dict]
     chunks: list[dict]
     sources: list[dict]
+    retrieval_policy: str
 
 
 def _detect_video_ids(query: str) -> set[str]:
@@ -305,53 +314,139 @@ def _retrieve_for_video(query: str, session_id: str, video_id: str, hook_only: b
     return retrieve(query=query, session_id=session_id, video_id=video_id, hook_only=hook_only, top_k=top_k)
 
 
+def hook_retrieval(
+    query: str,
+    session_id: str,
+    video_id: str | None = None,
+    top_k: int = BALANCED_TOP_K_PER_VIDEO,
+) -> list[dict]:
+    logger.info(
+        "Applying retrieval policy=%s session_id=%s video_id=%s top_k=%s",
+        HOOK_RETRIEVAL,
+        session_id,
+        video_id or "any",
+        top_k,
+    )
+    return retrieve(query=query, session_id=session_id, video_id=video_id, hook_only=True, top_k=top_k)
+
+
+def video_a_retrieval(query: str, session_id: str, top_k: int = BALANCED_TOP_K_PER_VIDEO) -> list[dict]:
+    logger.info(
+        "Applying retrieval policy=%s session_id=%s top_k=%s",
+        VIDEO_A_RETRIEVAL,
+        session_id,
+        top_k,
+    )
+    return _retrieve_for_video(query, session_id, "A", False, top_k)
+
+
+def video_b_retrieval(query: str, session_id: str, top_k: int = BALANCED_TOP_K_PER_VIDEO) -> list[dict]:
+    logger.info(
+        "Applying retrieval policy=%s session_id=%s top_k=%s",
+        VIDEO_B_RETRIEVAL,
+        session_id,
+        top_k,
+    )
+    return _retrieve_for_video(query, session_id, "B", False, top_k)
+
+
+def comparison_retrieval(
+    query: str,
+    session_id: str,
+    hook_only: bool = False,
+    top_k_per_video: int = BALANCED_TOP_K_PER_VIDEO,
+) -> list[dict]:
+    logger.info(
+        "Applying retrieval policy=%s session_id=%s hook_only=%s top_k_per_video=%s",
+        COMPARISON_RETRIEVAL,
+        session_id,
+        hook_only,
+        top_k_per_video,
+    )
+    chunks = []
+    for video_id in ("A", "B"):
+        if hook_only:
+            chunks.extend(hook_retrieval(query, session_id, video_id, top_k_per_video))
+        else:
+            chunks.extend(_retrieve_for_video(query, session_id, video_id, False, top_k_per_video))
+    return chunks
+
+
+def metadata_augmented_retrieval(query: str, session_id: str, video_ids: set[str]) -> list[dict]:
+    logger.info(
+        "Applying retrieval policy=%s session_id=%s video_ids=%s top_k_per_video=%s",
+        METADATA_AUGMENTED_RETRIEVAL,
+        session_id,
+        sorted(video_ids) or ["A", "B"],
+        BALANCED_TOP_K_PER_VIDEO,
+    )
+    if len(video_ids) == 1:
+        video_id = next(iter(video_ids))
+        if video_id == "A":
+            return video_a_retrieval(query, session_id)
+        if video_id == "B":
+            return video_b_retrieval(query, session_id)
+    return comparison_retrieval(query, session_id, hook_only=False, top_k_per_video=BALANCED_TOP_K_PER_VIDEO)
+
+
 def retrieve_chunks(state: CreatorSessionState) -> CreatorSessionState:
     route = state.get("route", TRANSCRIPT_ONLY)
     if route not in CHUNK_ROUTES:
-        return {"chunks": []}
+        return {"chunks": [], "retrieval_policy": "none"}
 
     query = state.get("resolved_query") or state["query"]
     session_id = state["session_id"]
 
     if route == IMPROVEMENT_SUGGESTION:
-        chunks = []
-        chunks.extend(
-            _retrieve_for_video(
-                f"{query} strong evidence what worked well engaging hook clarity",
-                session_id,
-                "A",
-                False,
-                4,
-            )
+        chunks = video_a_retrieval(
+            f"{query} strong evidence what worked well engaging hook clarity",
+            session_id,
         )
         chunks.extend(
-            _retrieve_for_video(
+            video_b_retrieval(
                 f"{query} improvement opportunity weak hook unclear pacing missing context",
                 session_id,
-                "B",
-                False,
-                4,
             )
         )
-        return {"chunks": chunks}
+        return {"chunks": chunks, "retrieval_policy": METADATA_AUGMENTED_RETRIEVAL}
 
     hook_only = route == HOOK_COMPARISON
     video_ids = _comparison_video_ids(query, route)
     if len(video_ids) == 2:
-        chunks = []
-        for video_id in ("A", "B"):
-            chunks.extend(_retrieve_for_video(query, session_id, video_id, hook_only, 4 if hook_only else 3))
-        return {"chunks": chunks}
+        if route == MIXED_COMPARISON:
+            return {
+                "chunks": metadata_augmented_retrieval(query, session_id, video_ids),
+                "retrieval_policy": METADATA_AUGMENTED_RETRIEVAL,
+            }
+        return {
+            "chunks": comparison_retrieval(query, session_id, hook_only=hook_only),
+            "retrieval_policy": HOOK_RETRIEVAL if hook_only else COMPARISON_RETRIEVAL,
+        }
 
     video_id = next(iter(video_ids), None)
+    if route == MIXED_COMPARISON:
+        return {
+            "chunks": metadata_augmented_retrieval(query, session_id, video_ids),
+            "retrieval_policy": METADATA_AUGMENTED_RETRIEVAL,
+        }
+    if hook_only:
+        return {
+            "chunks": hook_retrieval(query, session_id, video_id),
+            "retrieval_policy": HOOK_RETRIEVAL,
+        }
     return {
         "chunks": retrieve(
             query=query,
             session_id=session_id,
             video_id=video_id,
-            hook_only=hook_only,
-            top_k=8 if hook_only else 6,
-        )
+            hook_only=False,
+            top_k=DEFAULT_TRANSCRIPT_TOP_K,
+        ),
+        "retrieval_policy": VIDEO_A_RETRIEVAL
+        if video_id == "A"
+        else VIDEO_B_RETRIEVAL
+        if video_id == "B"
+        else "transcript_retrieval",
     }
 
 

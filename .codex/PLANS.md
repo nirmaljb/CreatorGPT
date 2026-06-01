@@ -50,6 +50,7 @@
 - Use typed Postgres metadata tools for numeric and creator/follower questions.
 - Use transcript retrieval only for semantic and recommendation questions.
 - Restrict hook comparison to first-5-second chunks.
+- Add named retrieval policies so comparison questions retrieve balanced Video A and Video B evidence.
 - Resolve simple follow-up references from recent chat history, then re-route.
 - Add citation validation.
 - Add an eval script for the assignment's expected question set before making further retrieval/chunking changes.
@@ -61,6 +62,7 @@
 - Hook questions cite hook chunks only.
 - Recommendation answers cite transcript evidence and metrics.
 - Improvement answers retrieve Video A evidence for what worked and Video B evidence for improvement opportunities.
+- Comparison and metadata-augmented routes retrieve `top_k=4` from Video A and `top_k=4` from Video B instead of one global `top_k=8` search.
 - Follow-up questions resolve obvious video references without using a full query-rewrite pipeline.
 - Eval script passes the assignment's core questions.
 

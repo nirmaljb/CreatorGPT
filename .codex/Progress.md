@@ -15,7 +15,7 @@ Phase 2 implementation.
 - Live ingest and chat smoke tests pass after the YouTube transcript fast-path and async ingestion changes.
 - Project docs have been moved under `.codex/`.
 - Phase documentation is tracked under `docs/phase/`; Phase 1 now includes high-level Mermaid flow diagrams.
-- Phase 2 router implementation is in progress with explicit route labels and rules-first classification.
+- Phase 2 router implementation is in progress with explicit route labels, rules-first classification, and named retrieval policies.
 
 ## Completed Chunks
 
@@ -95,10 +95,12 @@ Phase 2 implementation.
 - Added minimal follow-up resolution for obvious video references such as "their", "that video", and "what about B", then re-route the resolved question.
 - Updated route-specific prompt requirements for hook, mixed, improvement, transcript, and metadata-only answers.
 - Updated Phase 2 documentation, architecture notes, milestone notes, and agent decisions with the rules-first router tradeoff.
+- Added named Phase 2 retrieval policies for hook, Video A, Video B, balanced comparison, and metadata-augmented retrieval.
+- Changed comparison, hook, mixed, and improvement retrieval to avoid one global vector search and instead retrieve balanced Video A and Video B context.
 
 ## Current Next Step
 
-Use `make ci` before PRs and run `python scripts/eval_assignment_questions.py --session-id <id>` against a completed YouTube + Instagram session before making further retrieval, chunking, embedding, or routing optimizations.
+Run `python scripts/eval_assignment_questions.py --session-id <id>` against a completed YouTube + Instagram session when the local backend and Qdrant Cloud are reachable before making further retrieval, chunking, embedding, or routing optimizations.
 
 ## Known Issues
 
@@ -177,3 +179,8 @@ Use `make ci` before PRs and run `python scripts/eval_assignment_questions.py --
 - `git diff --check` passed after the Phase 2 router implementation.
 - A classifier smoke check mapped the five assignment questions to `METADATA_ONLY`, `METADATA_ONLY`, `HOOK_COMPARISON`, `MIXED_COMPARISON`, and `IMPROVEMENT_SUGGESTION`.
 - `backend/.venv/bin/python scripts/eval_assignment_questions.py --api-base http://127.0.0.1:8000 --session-id 4920d31a-0ee2-4d00-8b5b-e61d3e7a470c` passed all five live assignment eval questions after the Phase 2 router implementation.
+- `backend/.venv/bin/python -m pytest backend/tests/test_rag_graph.py` passed after adding named retrieval policies and balanced A/B comparison retrieval.
+- `make backend-lint` and `make backend-tests` passed after adding named retrieval policies; backend tests now report 46 selected tests plus 1 deselected smoke test.
+- `make ci` passed after adding named retrieval policies and the markdown final-newline fix for `.codex/skills/grill-me/SKILL.md`.
+- `git diff --check` passed after adding named retrieval policies.
+- Live assignment eval rerun was attempted after the retrieval-policy change, but the existing backend on port 8000 timed out and a fresh backend on port 8002 could not resolve the configured Qdrant Cloud host from this environment.

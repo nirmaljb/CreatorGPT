@@ -2,12 +2,16 @@ import unittest
 from unittest.mock import patch
 
 from backend.app.rag.graph import (
+    COMPARISON_RETRIEVAL,
     FOLLOW_UP,
     HOOK_COMPARISON,
+    HOOK_RETRIEVAL,
     IMPROVEMENT_SUGGESTION,
+    METADATA_AUGMENTED_RETRIEVAL,
     METADATA_ONLY,
     MIXED_COMPARISON,
     TRANSCRIPT_ONLY,
+    VIDEO_B_RETRIEVAL,
     _detect_video_ids,
     classify_query,
     resolve_follow_up,
@@ -68,6 +72,8 @@ class RagGraphRoutingTests(unittest.TestCase):
 
         self.assertEqual([chunk["video_id"] for chunk in state["chunks"]], ["A", "B"])
         self.assertEqual([chunk["hook_only"] for chunk in state["chunks"]], [True, True])
+        self.assertEqual([chunk["top_k"] for chunk in state["chunks"]], [4, 4])
+        self.assertEqual(state["retrieval_policy"], HOOK_RETRIEVAL)
         self.assertEqual(mocked_retrieve.call_count, 2)
 
     def test_mixed_question_uses_vector_retrieval_for_both_videos(self) -> None:
@@ -83,7 +89,41 @@ class RagGraphRoutingTests(unittest.TestCase):
 
         self.assertEqual([chunk["video_id"] for chunk in state["chunks"]], ["A", "B"])
         self.assertEqual([chunk["hook_only"] for chunk in state["chunks"]], [False, False])
+        self.assertEqual([chunk["top_k"] for chunk in state["chunks"]], [4, 4])
+        self.assertEqual(state["retrieval_policy"], METADATA_AUGMENTED_RETRIEVAL)
         self.assertEqual(mocked_retrieve.call_count, 2)
+
+    def test_transcript_comparison_uses_balanced_video_retrieval(self) -> None:
+        with patch("backend.app.rag.graph.retrieve") as mocked_retrieve:
+            mocked_retrieve.side_effect = lambda **kwargs: [kwargs]
+            state = retrieve_chunks(
+                {
+                    "session_id": "session-1",
+                    "query": "Compare the topics in Video A and Video B.",
+                    "route": TRANSCRIPT_ONLY,
+                }
+            )
+
+        self.assertEqual([chunk["video_id"] for chunk in state["chunks"]], ["A", "B"])
+        self.assertEqual([chunk["top_k"] for chunk in state["chunks"]], [4, 4])
+        self.assertEqual(state["retrieval_policy"], COMPARISON_RETRIEVAL)
+        self.assertEqual(mocked_retrieve.call_count, 2)
+
+    def test_transcript_single_video_stays_filtered_to_that_video(self) -> None:
+        with patch("backend.app.rag.graph.retrieve") as mocked_retrieve:
+            mocked_retrieve.side_effect = lambda **kwargs: [kwargs]
+            state = retrieve_chunks(
+                {
+                    "session_id": "session-1",
+                    "query": "What does Video B discuss?",
+                    "route": TRANSCRIPT_ONLY,
+                }
+            )
+
+        self.assertEqual([chunk["video_id"] for chunk in state["chunks"]], ["B"])
+        self.assertEqual([chunk["top_k"] for chunk in state["chunks"]], [6])
+        self.assertEqual(state["retrieval_policy"], VIDEO_B_RETRIEVAL)
+        mocked_retrieve.assert_called_once()
 
     def test_improvement_route_retrieves_strong_a_and_weak_b_evidence(self) -> None:
         with patch("backend.app.rag.graph.retrieve") as mocked_retrieve:
@@ -97,6 +137,8 @@ class RagGraphRoutingTests(unittest.TestCase):
             )
 
         self.assertEqual([chunk["video_id"] for chunk in state["chunks"]], ["A", "B"])
+        self.assertEqual([chunk["top_k"] for chunk in state["chunks"]], [4, 4])
+        self.assertEqual(state["retrieval_policy"], METADATA_AUGMENTED_RETRIEVAL)
         self.assertIn("strong evidence", state["chunks"][0]["query"])
         self.assertIn("improvement opportunity", state["chunks"][1]["query"])
 

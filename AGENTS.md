@@ -112,6 +112,8 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - The Phase 2 router is rules-first, not LLM-classified. This keeps assignment routing deterministic, cheap, and unit-testable; add an LLM classifier only if evals prove the rules are insufficient.
 - `FOLLOW_UP` handling is intentionally minimal: resolve obvious references like "their", "that video", and "what about B" from recent chat history, then re-route the resolved question.
 - Semantic transcript questions use Qdrant retrieval. Mixed comparison and improvement questions use the Postgres metadata tools plus Qdrant retrieval.
+- Phase 2 retrieval uses named policies instead of an unqualified global `top_k` search: `hook_retrieval`, `video_a_retrieval`, `video_b_retrieval`, `comparison_retrieval`, and `metadata_augmented_retrieval`.
+- Comparison and metadata-augmented comparison routes retrieve balanced evidence with `top_k=4` from Video A and `top_k=4` from Video B, then merge the context. Do not replace this with one global vector search unless evals prove a better policy.
 - Mixed comparison answers must cite transcript chunk evidence when chunks are retrieved, not only metadata metrics.
 - Assignment evals are run through `scripts/eval_assignment_questions.py`; reusable logic lives in `backend.evals.assignment_eval` for later mocked CI coverage.
 - Required CI runs backend Ruff lint, backend Pytest tests, frontend ESLint, frontend TypeScript typecheck, frontend build, markdown lint, and a provider-mocked smoke test.
