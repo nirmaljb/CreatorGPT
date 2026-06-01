@@ -1,49 +1,153 @@
 # Creator Video RAG Comparator
 
-Full-stack Phase 1 implementation for comparing one YouTube video and one Instagram Reel with metadata, transcripts, vector retrieval, and streaming cited chat.
+This app compares one YouTube video and one Instagram Reel. It collects video metadata, gets transcripts, stores the useful text for search, and lets a user ask questions in a chat window. The answers stream back with citations, so the user can see whether each fact came from video metadata or transcript text.
 
-## Stack
+The project is built for a demo flow:
 
-- Backend: FastAPI, LangGraph, Groq, FastEmbed, Qdrant Cloud, Neon Postgres
-- Frontend: Next.js
-- Media: `youtube-transcript-api`, `yt-dlp`, Groq `whisper-large-v3`
-
-## Backend
-
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cd ..
-cp .env.example .env
-uvicorn backend.app.main:app --reload --reload-dir backend/app
+```text
+YouTube URL + Instagram Reel URL
+-> ingest both videos
+-> store metadata and transcripts
+-> mark the session completed
+-> answer chat questions with citations
 ```
 
-`ffmpeg` must be installed for reliable audio extraction. Temporary audio is written outside the repo by default so reload mode does not restart on media-file changes.
+## Demo
 
-YouTube ingestion tries captions first and only falls back to audio download plus Groq `whisper-large-v3` when captions are unavailable. YouTube captions are not capped by `MAX_VIDEO_SECONDS`, so videos longer than 10 minutes can ingest when captions are available. Instagram uses the audio plus Groq Whisper path.
+Add a short GIF or video here that shows:
 
-Extractor results are cached in Postgres by platform, URL, cache version, and `MAX_VIDEO_SECONDS` so repeated demos can reuse real metadata and transcripts. Set `FORCE_REFRESH=true` to bypass cache reads and force fresh extraction.
+- entering one YouTube URL and one Instagram Reel URL
+- ingest progress reaching `completed`
+- asking a question
+- receiving a streamed cited answer
 
-## Frontend
+<!-- Demo GIF or video placeholder -->
+
+## Documentation
+
+| Document | What It Explains | Best For |
+| --- | --- | --- |
+| [Product Spec](.codex/PRODUCT_SPEC.md) | Product goal, user needs, and expected behavior | Product reviewers |
+| [Architecture](.codex/ARCHITECTURE.md) | System design, API flow, database tables, and quality gates | Engineers |
+| [Plans](.codex/PLANS.md) | Phase milestones and acceptance criteria | Reviewers and maintainers |
+| [Progress](.codex/Progress.md) | Work completed, checks run, and current next steps | Anyone tracking status |
+| [Phase 1](docs/phase/phase-1.md) | Thin vertical slice scope and flow | Demo setup |
+| [Phase 2](docs/phase/phase-2.md) | Grounded intelligence and eval scope | RAG quality work |
+| [Phase 3](docs/phase/phase-3.md) | Product UI scope | Frontend polish |
+| [Phase 4](docs/phase/phase-4.md) | CI, smoke tests, and demo readiness | Release readiness |
+| [Agent Notes](AGENTS.md) | Developer workflow and important project decisions | Contributors |
+
+## Technologies
+
+| Area | Technology | Purpose |
+| --- | --- | --- |
+| Frontend | Next.js, React, TypeScript | Web app, video inputs, status display, and chat UI |
+| Backend API | FastAPI | Ingest, status, messages, health, and chat endpoints |
+| Orchestration | LangGraph | Routes each question to metadata, transcript search, or both |
+| Chat model | Groq `llama-3.3-70b-versatile` | Streams final chat answers |
+| Transcription | Groq `whisper-large-v3` | Creates transcripts when captions are unavailable |
+| YouTube captions | `youtube-transcript-api` | Fast transcript path for YouTube videos with captions |
+| Media extraction | `yt-dlp`, `ffmpeg` | Reads video metadata and downloads temporary audio |
+| Embeddings | FastEmbed `BAAI/bge-small-en-v1.5` | Converts transcript chunks into vectors |
+| Vector database | Qdrant Cloud | Stores and searches transcript chunks |
+| Relational database | Neon Postgres | Stores sessions, video metadata, raw metadata, cache, and chat history |
+| Backend tests | Pytest | Runs unit and mocked smoke tests |
+| Backend lint | Ruff | Checks and formats Python code |
+| Frontend checks | ESLint, TypeScript, Next build | Checks frontend code and production build |
+| Markdown checks | markdownlint | Keeps documentation readable and consistent |
+| CI | GitHub Actions | Runs lint, tests, build, markdown lint, and mocked smoke test |
+
+## High-Level Pipeline
+
+1. The user enters two URLs: one YouTube video and one Instagram Reel.
+2. `POST /ingest` creates a session and returns `session_id` immediately.
+3. The backend extracts real metadata for both videos and stores it in Postgres.
+4. The backend gets transcripts. YouTube tries captions first. If captions are missing, the backend uses Groq Whisper. Instagram uses the audio plus Groq Whisper path.
+5. Transcript text is split into chunks. Chunks are embedded and stored in Qdrant with `session_id` and `video_id` filters.
+6. `GET /status/{session_id}` shows progress and eventually reaches `completed` or a clear failed state.
+7. `POST /chat` classifies the question:
+   - numeric and creator questions use Postgres metadata only
+   - transcript questions use Qdrant retrieval
+   - mixed comparison questions use both
+8. The answer streams back with source citations such as `[Video A metadata]` or `[Video B, chunk 2, 00:12-00:24]`.
+
+The app should not silently fall back to fake data. If a provider fails, the session or video should show a clear error.
+
+## Installation Guide
+
+### 1. Install System Tools
+
+Install these first:
+
+- Python 3.11 or newer
+- Node.js 22 or newer
+- npm
+- `ffmpeg`
+
+`ffmpeg` is needed for reliable audio extraction before transcription.
+
+### 2. Create Environment File
+
+Copy the example file:
+
+```bash
+cp .env.example .env
+```
+
+Then fill in these required values in `.env`:
+
+| Variable | What It Is For |
+| --- | --- |
+| `GROQ_API_KEY` | Groq chat and Whisper transcription |
+| `DATABASE_URL` | Neon Postgres connection string |
+| `QDRANT_URL` | Qdrant Cloud URL |
+| `QDRANT_API_KEY` | Qdrant Cloud API key |
+
+Optional values are already shown in [.env.example](.env.example).
+
+### 3. Install Backend
+
+```bash
+python -m venv backend/.venv
+backend/.venv/bin/python -m pip install -r backend/requirements.txt
+```
+
+For development checks, install the dev tools too:
+
+```bash
+backend/.venv/bin/python -m pip install -r backend/requirements-dev.txt
+```
+
+### 4. Install Frontend
 
 ```bash
 cd frontend
-npm install
+npm ci
+cd ..
+```
+
+### 5. Start Backend
+
+```bash
+backend/.venv/bin/uvicorn backend.app.main:app --reload --reload-dir backend/app
+```
+
+The backend starts at `http://127.0.0.1:8000`.
+
+### 6. Start Frontend
+
+In a second terminal:
+
+```bash
+cd frontend
 npm run dev
 ```
 
 Open `http://localhost:3000`.
 
+If port `3000` is already busy, Next.js may choose another port such as `3001`.
+
 ## Local Checks
-
-Install development tooling:
-
-```bash
-backend/.venv/bin/python -m pip install -r backend/requirements-dev.txt
-cd frontend && npm ci
-```
 
 Run the same checks as CI:
 
@@ -51,11 +155,21 @@ Run the same checks as CI:
 make ci
 ```
 
-The required CI path uses provider-mocked tests only. Real Groq, Qdrant Cloud, Neon, YouTube, and Instagram checks are manual or nightly-only.
+This runs:
+
+- backend lint
+- backend tests
+- frontend lint
+- frontend typecheck
+- frontend build
+- markdown lint
+- mocked smoke test
+
+The required CI path uses mocked tests only. It does not need real Groq, Qdrant Cloud, Neon, YouTube, or Instagram access. Real-provider checks should be manual or nightly, not required for every commit.
 
 ## Assignment Evals
 
-After ingesting a YouTube + Instagram session and waiting for `completed`, run the assignment question evals:
+After ingesting a real YouTube + Instagram session and waiting for `completed`, run:
 
 ```bash
 backend/.venv/bin/python scripts/eval_assignment_questions.py \
@@ -63,14 +177,24 @@ backend/.venv/bin/python scripts/eval_assignment_questions.py \
   --session-id <completed-session-id>
 ```
 
-The eval asks the five required questions, checks that responses streamed successfully and contain citations, verifies numeric answers against Postgres-backed status metadata, and fails if metadata-only questions return transcript chunks, missing follower counts are invented, or hook questions cite chunks outside the first 5 seconds.
+The eval asks the assignment questions and checks that:
 
-## Required Environment
+- the response streamed successfully
+- the answer is not empty
+- the answer has citations
+- numeric answers match Postgres metadata
+- missing follower counts are stated as unavailable
+- hook answers cite only early chunks
 
-Set these in `.env` before running the backend:
+## Useful Commands
 
-- `GROQ_API_KEY`
-- `DATABASE_URL`
-- `QDRANT_URL`
-- `QDRANT_API_KEY`
-- `FORCE_REFRESH` optional, defaults to `false`
+| Command | Purpose |
+| --- | --- |
+| `make backend-lint` | Run Ruff checks for Python |
+| `make backend-tests` | Run backend tests except smoke |
+| `make mocked-smoke` | Run the provider-mocked API smoke test |
+| `make frontend-lint` | Run frontend ESLint |
+| `make frontend-typecheck` | Run TypeScript checks |
+| `make frontend-build` | Build the Next.js app |
+| `make markdown-lint` | Check Markdown files |
+| `make ci` | Run all required checks |
