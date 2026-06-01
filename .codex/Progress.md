@@ -15,7 +15,7 @@ Phase 2 implementation.
 - Live ingest and chat smoke tests pass after the YouTube transcript fast-path and async ingestion changes.
 - Project docs have been moved under `.codex/`.
 - Phase documentation is tracked under `docs/phase/`; Phase 1 now includes high-level Mermaid flow diagrams.
-- Phase 2 router implementation is in progress with explicit route labels, rules-first classification, and named retrieval policies.
+- Phase 2 router implementation is in progress with explicit route labels, rules-first classification, named retrieval policies, and route-aware assignment evals.
 
 ## Completed Chunks
 
@@ -97,6 +97,10 @@ Phase 2 implementation.
 - Updated Phase 2 documentation, architecture notes, milestone notes, and agent decisions with the rules-first router tradeoff.
 - Added named Phase 2 retrieval policies for hook, Video A, Video B, balanced comparison, and metadata-augmented retrieval.
 - Changed comparison, hook, mixed, and improvement retrieval to avoid one global vector search and instead retrieve balanced Video A and Video B context.
+- Exposed `route` and `retrieval_policy` in `/chat` SSE `sources` and `done` events for route-aware eval validation.
+- Tightened assignment eval cases to assert expected routes, expected retrieval policies, hook-only answer citations, exact metadata citations, and A/B transcript chunk citations for mixed and improvement answers.
+- Changed backend startup so Qdrant collection validation is non-fatal by default; the API boots in degraded mode with `/health` showing `qdrant: false`, while ingest/chat still fail visibly if Qdrant is required and unreachable.
+- Added `REQUIRE_QDRANT_ON_STARTUP` for fail-fast deployments and `QDRANT_CHECK_COMPATIBILITY=false` to suppress Qdrant server-version probe warnings by default.
 
 ## Current Next Step
 
@@ -184,3 +188,12 @@ Run `python scripts/eval_assignment_questions.py --session-id <id>` against a co
 - `make ci` passed after adding named retrieval policies and the markdown final-newline fix for `.codex/skills/grill-me/SKILL.md`.
 - `git diff --check` passed after adding named retrieval policies.
 - Live assignment eval rerun was attempted after the retrieval-policy change, but the existing backend on port 8000 timed out and a fresh backend on port 8002 could not resolve the configured Qdrant Cloud host from this environment.
+- `backend/.venv/bin/python -m pytest backend/tests/test_assignment_eval.py backend/tests/test_rag_service.py` passed after adding route-aware eval checks and chat stream route traces.
+- `make backend-lint` and `make backend-tests` passed after the route-aware eval change; backend tests now report 52 selected tests plus 1 deselected smoke test.
+- `make ci` passed after the route-aware eval change.
+- `git diff --check` passed after the route-aware eval change.
+- `backend/.venv/bin/python -m pytest backend/tests/test_startup.py` passed after making Qdrant startup validation non-fatal by default.
+- `backend/.venv/bin/python -m pytest backend/tests/test_mocked_smoke.py` passed after making Qdrant startup validation non-fatal by default.
+- `make backend-lint` and `make backend-tests` passed after making Qdrant startup validation non-fatal by default; backend tests now report 54 selected tests plus 1 deselected smoke test.
+- `backend/.venv/bin/uvicorn backend.app.main:app --host 127.0.0.1 --port 8003` started successfully after the Qdrant startup change and no longer emitted the Qdrant compatibility warning; the temporary process was stopped after verification.
+- `make ci` passed after making Qdrant startup validation non-fatal by default.

@@ -1,6 +1,14 @@
 import unittest
 
-from backend.evals.assignment_eval import ASSIGNMENT_EVALS, parse_sse, validate_eval_case
+from backend.evals.assignment_eval import (
+    ASSIGNMENT_EVALS,
+    HOOK_RETRIEVAL,
+    METADATA_AUGMENTED_RETRIEVAL,
+    METADATA_ONLY,
+    MIXED_COMPARISON,
+    parse_sse,
+    validate_eval_case,
+)
 
 
 class AssignmentEvalTests(unittest.TestCase):
@@ -48,6 +56,58 @@ class AssignmentEvalTests(unittest.TestCase):
         )
 
         self.assertIn("engagement rate for Video B does not match Postgres value 0.75", failures)
+
+    def test_eval_rejects_wrong_route_when_route_enforced(self) -> None:
+        case = ASSIGNMENT_EVALS[0]
+        sources = [
+            {"type": "metadata", "video_id": "A", "source_tag": "[Video A metadata]"},
+            {"type": "metadata", "video_id": "B", "source_tag": "[Video B metadata]"},
+        ]
+        metadata = {
+            "A": {"engagement_rate": 1.25, "engagement_rate_available": True},
+            "B": {"engagement_rate": 0.75, "engagement_rate_available": True},
+        }
+
+        failures = validate_eval_case(
+            case,
+            "Video A is 1.25% [Video A metadata]. Video B is 0.75% [Video B metadata].",
+            sources,
+            status_metadata=metadata,
+            events=[{"event": "done", "data": {"ok": True}}],
+            route=MIXED_COMPARISON,
+            retrieval_policy=METADATA_AUGMENTED_RETRIEVAL,
+            enforce_route=True,
+        )
+
+        self.assertIn("expected route METADATA_ONLY but got MIXED_COMPARISON", failures)
+        self.assertIn(
+            "expected retrieval policy none but got metadata_augmented_retrieval",
+            failures,
+        )
+
+    def test_eval_accepts_expected_metadata_route_when_route_enforced(self) -> None:
+        case = ASSIGNMENT_EVALS[0]
+        sources = [
+            {"type": "metadata", "video_id": "A", "source_tag": "[Video A metadata]"},
+            {"type": "metadata", "video_id": "B", "source_tag": "[Video B metadata]"},
+        ]
+        metadata = {
+            "A": {"engagement_rate": 1.25, "engagement_rate_available": True},
+            "B": {"engagement_rate": 0.75, "engagement_rate_available": True},
+        }
+
+        failures = validate_eval_case(
+            case,
+            "Video A is 1.25% [Video A metadata]. Video B is 0.75% [Video B metadata].",
+            sources,
+            status_metadata=metadata,
+            events=[{"event": "done", "data": {"ok": True}}],
+            route=METADATA_ONLY,
+            retrieval_policy=None,
+            enforce_route=True,
+        )
+
+        self.assertEqual(failures, [])
 
     def test_unavailable_engagement_must_be_stated_as_unavailable(self) -> None:
         case = ASSIGNMENT_EVALS[0]
@@ -171,6 +231,67 @@ class AssignmentEvalTests(unittest.TestCase):
 
         self.assertIn("hook eval returned chunk sources starting at or after 5 seconds", failures)
 
+    def test_hook_eval_rejects_wrong_retrieval_policy(self) -> None:
+        case = ASSIGNMENT_EVALS[2]
+        sources = [
+            {
+                "type": "chunk",
+                "video_id": "A",
+                "start_time": 0.0,
+                "source_tag": "[Video A, chunk 0, 00:00-00:04]",
+            },
+            {
+                "type": "chunk",
+                "video_id": "B",
+                "start_time": 0.0,
+                "source_tag": "[Video B, chunk 0, 00:00-00:04]",
+            },
+        ]
+
+        failures = validate_eval_case(
+            case,
+            "A hook [Video A, chunk 0, 00:00-00:04]. B hook [Video B, chunk 0, 00:00-00:04].",
+            sources,
+            events=[{"event": "done", "data": {"ok": True}}],
+            route="HOOK_COMPARISON",
+            retrieval_policy="comparison_retrieval",
+            enforce_route=True,
+        )
+
+        self.assertIn("expected retrieval policy hook_retrieval but got comparison_retrieval", failures)
+
+    def test_hook_eval_requires_answer_to_cite_hook_chunks_only(self) -> None:
+        case = ASSIGNMENT_EVALS[2]
+        sources = [
+            {"type": "metadata", "video_id": "A", "source_tag": "[Video A metadata]"},
+            {
+                "type": "chunk",
+                "video_id": "A",
+                "start_time": 0.0,
+                "source_tag": "[Video A, chunk 0, 00:00-00:04]",
+            },
+            {
+                "type": "chunk",
+                "video_id": "B",
+                "start_time": 0.0,
+                "source_tag": "[Video B, chunk 0, 00:00-00:04]",
+            },
+        ]
+
+        failures = validate_eval_case(
+            case,
+            "Video A has the sharper opening [Video A metadata].",
+            sources,
+            events=[{"event": "done", "data": {"ok": True}}],
+            route="HOOK_COMPARISON",
+            retrieval_policy=HOOK_RETRIEVAL,
+            enforce_route=True,
+        )
+
+        self.assertIn("hook answer cited metadata instead of hook chunks only", failures)
+        self.assertIn("answer did not cite a returned Video A transcript chunk", failures)
+        self.assertIn("answer did not cite a returned Video B transcript chunk", failures)
+
     def test_mixed_eval_requires_chunks_from_both_videos(self) -> None:
         case = ASSIGNMENT_EVALS[4]
         sources = [
@@ -187,6 +308,37 @@ class AssignmentEvalTests(unittest.TestCase):
         failures = validate_eval_case(case, "Improve B using [Video A, chunk 0, 00:00-00:04]", sources)
 
         self.assertIn("missing transcript chunk source for Video B", failures)
+
+    def test_improvement_eval_requires_answer_chunk_citations_from_both_videos(self) -> None:
+        case = ASSIGNMENT_EVALS[4]
+        sources = [
+            {"type": "metadata", "video_id": "A", "source_tag": "[Video A metadata]"},
+            {"type": "metadata", "video_id": "B", "source_tag": "[Video B metadata]"},
+            {
+                "type": "chunk",
+                "video_id": "A",
+                "start_time": 0.0,
+                "source_tag": "[Video A, chunk 0, 00:00-00:04]",
+            },
+            {
+                "type": "chunk",
+                "video_id": "B",
+                "start_time": 0.0,
+                "source_tag": "[Video B, chunk 0, 00:00-00:04]",
+            },
+        ]
+
+        failures = validate_eval_case(
+            case,
+            "Improve B by copying A's opening clarity [Video A, chunk 0, 00:00-00:04].",
+            sources,
+            events=[{"event": "done", "data": {"ok": True}}],
+            route="IMPROVEMENT_SUGGESTION",
+            retrieval_policy=METADATA_AUGMENTED_RETRIEVAL,
+            enforce_route=True,
+        )
+
+        self.assertIn("answer did not cite a returned Video B transcript chunk", failures)
 
 
 if __name__ == "__main__":

@@ -27,7 +27,11 @@ def get_qdrant_client() -> QdrantClient:
                 logger.info(
                     "Creating Qdrant client url=%s collection=%s", settings.qdrant_url, settings.qdrant_collection
                 )
-                _client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key or None)
+                _client = QdrantClient(
+                    url=settings.qdrant_url,
+                    api_key=settings.qdrant_api_key or None,
+                    check_compatibility=settings.qdrant_check_compatibility,
+                )
     return _client
 
 

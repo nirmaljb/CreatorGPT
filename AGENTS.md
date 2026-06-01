@@ -104,7 +104,7 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Status and chat context expose metric availability flags so missing extractor counts are rendered as `unavailable` instead of treated as real zeroes.
 - Phase 1 uses SQLAlchemy `create_all` at startup instead of Alembic migrations to reduce setup overhead. If schema churn starts, add migrations in a later phase.
 - Ingestion runs as a FastAPI background task. Metadata is processed first for both videos, then per-video transcript/vector work runs concurrently. A production version should move this to a durable queue.
-- Backend startup validates Postgres and Qdrant by creating tables and ensuring the vector collection. This is fail-fast by design when `.env` is missing or cloud services are unavailable.
+- Backend startup always validates Postgres by creating tables. Qdrant collection validation is non-fatal by default so local development can boot when Qdrant Cloud/DNS is temporarily unavailable; `/health` reports `qdrant: false`, and ingest/chat still fail visibly when they need Qdrant. Set `REQUIRE_QDRANT_ON_STARTUP=true` to restore fail-fast Qdrant startup validation.
 - The chat path uses LangGraph for durable retrieval orchestration, then streams Groq tokens through a small provider wrapper so OpenAI can replace Groq later with minimal changes.
 - Compare questions that mention both Video A and Video B retrieve chunks from both videos; single-video questions stay filtered to that video.
 - Numeric and creator metadata questions must bypass Qdrant retrieval and use typed Postgres metadata tools only: `get_video_metrics`, `get_creator_info`, `get_engagement_comparison`, and `get_session_video_summary`.
@@ -115,6 +115,8 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Phase 2 retrieval uses named policies instead of an unqualified global `top_k` search: `hook_retrieval`, `video_a_retrieval`, `video_b_retrieval`, `comparison_retrieval`, and `metadata_augmented_retrieval`.
 - Comparison and metadata-augmented comparison routes retrieve balanced evidence with `top_k=4` from Video A and `top_k=4` from Video B, then merge the context. Do not replace this with one global vector search unless evals prove a better policy.
 - Mixed comparison answers must cite transcript chunk evidence when chunks are retrieved, not only metadata metrics.
+- `/chat` SSE `sources` and `done` events expose `route` and `retrieval_policy` so evals can assert routing behavior directly.
+- Assignment evals are route-aware: the five required questions assert expected route, expected retrieval policy when applicable, citation shape, numeric Postgres matches, unavailable metric handling, and A/B transcript evidence.
 - Assignment evals are run through `scripts/eval_assignment_questions.py`; reusable logic lives in `backend.evals.assignment_eval` for later mocked CI coverage.
 - Required CI runs backend Ruff lint, backend Pytest tests, frontend ESLint, frontend TypeScript typecheck, frontend build, markdown lint, and a provider-mocked smoke test.
 - The frontend uses `fetch` with a POST body and manually parses SSE because native `EventSource` does not support POST request bodies.
@@ -125,6 +127,7 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Ingestion uses a two-pass flow: scrape/store metadata for both videos first, then download/transcribe/embed each video. This makes status responses useful even while long transcription work is still running.
 - Ingestion logs are intentionally verbose in development: session ID, video ID, requested platform, metadata counts, duration, audio path, transcription word count, chunk count, Qdrant upsert count, elapsed time, and stack traces on failure.
 - Qdrant startup now validates existing collection dimensions against `EMBEDDING_DIMENSIONS` so provider/model swaps fail with a clear error instead of during upsert.
+- Qdrant client compatibility checks are disabled by default with `QDRANT_CHECK_COMPATIBILITY=false` to avoid startup warnings when Qdrant Cloud version probing is blocked; collection and dimension checks still run when Qdrant is reachable.
 - Development CORS allows local frontend ports 3000 and 3001 because Next.js may move to 3001 when 3000 is already occupied.
 - Session status includes persisted progress fields: `current_step` and `progress_percent`. The frontend uses them to show ingestion progress and to poll adaptively instead of using a fixed short interval.
 - Phase 1 does not implement retry. A browser refresh starts a clean frontend state instead of restoring the previous `session_id`; a later retry flow should be explicit and should not silently resume a stale failed session.

@@ -33,8 +33,19 @@ app.add_middleware(
 def startup() -> None:
     logger.info("Starting backend startup checks")
     database.init_db()
-    ensure_collection()
-    logger.info("Backend startup checks passed")
+    try:
+        ensure_collection()
+    except Exception as exc:
+        message = (
+            "Qdrant startup validation failed. The API will start in degraded mode with qdrant=false in /health. "
+            "Ingestion and transcript retrieval still require Qdrant and will fail visibly until QDRANT_URL, "
+            "QDRANT_API_KEY, and network/DNS connectivity are fixed. Set REQUIRE_QDRANT_ON_STARTUP=true to fail "
+            f"startup instead. Error: {exc}"
+        )
+        if settings.require_qdrant_on_startup:
+            raise RuntimeError(message) from exc
+        logger.warning(message)
+    logger.info("Backend startup checks completed")
 
 
 @app.get("/health")
@@ -47,8 +58,8 @@ def health() -> dict:
         logger.exception("Postgres health check failed")
     try:
         qdrant_ok = qdrant_health_check()
-    except Exception:
-        logger.exception("Qdrant health check failed")
+    except Exception as exc:
+        logger.warning("Qdrant health check failed: %s", exc)
     return {
         "api": True,
         "postgres": postgres_ok,

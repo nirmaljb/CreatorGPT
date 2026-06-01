@@ -15,11 +15,19 @@ INVALID_CITATION_PATTERNS = [
     re.compile(r"\[citation:", re.IGNORECASE),
     re.compile(r"\[POSTGRES METADATA TOOL RESULTS\]", re.IGNORECASE),
 ]
+METADATA_ONLY = "METADATA_ONLY"
+HOOK_COMPARISON = "HOOK_COMPARISON"
+MIXED_COMPARISON = "MIXED_COMPARISON"
+IMPROVEMENT_SUGGESTION = "IMPROVEMENT_SUGGESTION"
+HOOK_RETRIEVAL = "hook_retrieval"
+METADATA_AUGMENTED_RETRIEVAL = "metadata_augmented_retrieval"
 
 ASSIGNMENT_EVALS = [
     {
         "id": "engagement_rates",
         "question": "What is the engagement rate of each video?",
+        "expected_route": METADATA_ONLY,
+        "expected_retrieval_policy": None,
         "required_metadata_videos": {"A", "B"},
         "forbid_chunks": True,
         "required_citation_tags": {"[Video A metadata]", "[Video B metadata]"},
@@ -28,6 +36,8 @@ ASSIGNMENT_EVALS = [
     {
         "id": "creator_b_followers",
         "question": "Who is the creator of Video B and what is their follower count?",
+        "expected_route": METADATA_ONLY,
+        "expected_retrieval_policy": None,
         "required_metadata_videos": {"B"},
         "forbid_chunks": True,
         "required_citation_tags": {"[Video B metadata]"},
@@ -37,26 +47,36 @@ ASSIGNMENT_EVALS = [
     {
         "id": "first_five_second_hooks",
         "question": "Compare the hooks in the first 5 seconds.",
-        "required_metadata_videos": {"A", "B"},
+        "expected_route": HOOK_COMPARISON,
+        "expected_retrieval_policy": HOOK_RETRIEVAL,
+        "required_chunk_videos": {"A", "B"},
         "require_chunks": True,
         "require_hook_chunks": True,
+        "answer_citations_hook_chunks_only": True,
+        "required_answer_chunk_videos": {"A", "B"},
     },
     {
         "id": "why_a_more_engagement",
         "question": "Why did Video A get more engagement than Video B?",
+        "expected_route": MIXED_COMPARISON,
+        "expected_retrieval_policy": METADATA_AUGMENTED_RETRIEVAL,
         "required_metadata_videos": {"A", "B"},
         "required_chunk_videos": {"A", "B"},
         "require_chunks": True,
         "required_citation_tags": {"[Video A metadata]", "[Video B metadata]"},
         "required_engagement_videos": {"A", "B"},
         "required_view_videos": {"A", "B"},
+        "required_answer_chunk_videos": {"A", "B"},
     },
     {
         "id": "improve_b_from_a",
         "question": "Suggest improvements for B based on what worked in A.",
+        "expected_route": IMPROVEMENT_SUGGESTION,
+        "expected_retrieval_policy": METADATA_AUGMENTED_RETRIEVAL,
         "required_metadata_videos": {"A", "B"},
         "required_chunk_videos": {"A", "B"},
         "require_chunks": True,
+        "required_answer_chunk_videos": {"A", "B"},
     },
 ]
 
@@ -70,6 +90,8 @@ class EvalResult:
     answer: str
     sources: list[dict[str, Any]]
     streamed_successfully: bool
+    route: str | None = None
+    retrieval_policy: str | None = None
 
 
 def _request_json(url: str) -> dict[str, Any]:
@@ -78,7 +100,9 @@ def _request_json(url: str) -> dict[str, Any]:
         return json.loads(response.read().decode("utf-8"))
 
 
-def _post_chat(api_base: str, session_id: str, question: str) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
+def _post_chat(
+    api_base: str, session_id: str, question: str
+) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]], str | None, str | None]:
     body = json.dumps({"session_id": session_id, "message": question}).encode("utf-8")
     request = urllib.request.Request(
         f"{api_base.rstrip('/')}/chat",
@@ -92,6 +116,7 @@ def _post_chat(api_base: str, session_id: str, question: str) -> tuple[str, list
     answer = ""
     sources: list[dict[str, Any]] = []
     events = parse_sse(raw)
+    route, retrieval_policy = _route_trace_from_events(events)
     for event in events:
         event_name = event.get("event")
         payload = event.get("data") or {}
@@ -101,7 +126,7 @@ def _post_chat(api_base: str, session_id: str, question: str) -> tuple[str, list
             answer += payload.get("token", "")
         elif event_name == "error":
             raise RuntimeError(payload.get("message", "Chat stream returned an error event"))
-    return answer, sources, events
+    return answer, sources, events, route, retrieval_policy
 
 
 def parse_sse(raw: str) -> list[dict[str, Any]]:
@@ -121,6 +146,19 @@ def parse_sse(raw: str) -> list[dict[str, Any]]:
             payload = json.loads("\n".join(data_lines))
         events.append({"event": event_name, "data": payload})
     return events
+
+
+def _route_trace_from_events(events: list[dict[str, Any]]) -> tuple[str | None, str | None]:
+    route = None
+    retrieval_policy = None
+    for event in events:
+        if event.get("event") not in {"sources", "done"}:
+            continue
+        payload = event.get("data") or {}
+        route = payload.get("route") or route
+        if "retrieval_policy" in payload:
+            retrieval_policy = payload.get("retrieval_policy")
+    return route, retrieval_policy
 
 
 def _metadata_by_video(status: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -195,6 +233,9 @@ def validate_eval_case(
     sources: list[dict[str, Any]],
     status_metadata: dict[str, dict[str, Any]] | None = None,
     events: list[dict[str, Any]] | None = None,
+    route: str | None = None,
+    retrieval_policy: str | None = None,
+    enforce_route: bool = False,
 ) -> list[str]:
     failures: list[str] = []
     status_metadata = status_metadata or {}
@@ -202,6 +243,17 @@ def validate_eval_case(
     chunk_sources = [source for source in sources if source.get("type") == "chunk"]
     metadata_videos = {source.get("video_id") for source in metadata_sources}
     chunk_videos = {source.get("video_id") for source in chunk_sources}
+
+    if enforce_route:
+        expected_route = case.get("expected_route")
+        if expected_route and route != expected_route:
+            failures.append(f"expected route {expected_route} but got {route or 'unavailable'}")
+        if "expected_retrieval_policy" in case:
+            expected_policy = case.get("expected_retrieval_policy")
+            if retrieval_policy != expected_policy:
+                failures.append(
+                    f"expected retrieval policy {expected_policy or 'none'} but got {retrieval_policy or 'none'}"
+                )
 
     if not _streamed_successfully(events):
         failures.append("response did not stream to a successful done event")
@@ -228,6 +280,18 @@ def validate_eval_case(
         non_hook_sources = [source for source in chunk_sources if float(source.get("start_time") or 0.0) >= 5.0]
         if non_hook_sources:
             failures.append("hook eval returned chunk sources starting at or after 5 seconds")
+    if case.get("answer_citations_hook_chunks_only"):
+        answer_citations = CITATION_PATTERN.findall(answer)
+        metadata_citations = [citation for citation in answer_citations if citation.endswith(" metadata]")]
+        if metadata_citations:
+            failures.append("hook answer cited metadata instead of hook chunks only")
+        non_hook_answer_tags = {
+            source.get("source_tag")
+            for source in chunk_sources
+            if float(source.get("start_time") or 0.0) >= 5.0 and source.get("source_tag") in answer
+        }
+        if non_hook_answer_tags:
+            failures.append("hook answer cited a non-hook transcript chunk")
 
     for tag in case.get("required_citation_tags", set()):
         if tag not in answer:
@@ -241,6 +305,24 @@ def validate_eval_case(
     source_tags = {source.get("source_tag") for source in sources if source.get("source_tag")}
     if source_tags and not any(tag in answer for tag in source_tags):
         failures.append("answer did not include any returned source tag")
+
+    for video_id in case.get("required_answer_chunk_videos", set()):
+        video_chunk_tags = {
+            source.get("source_tag")
+            for source in chunk_sources
+            if source.get("video_id") == video_id and source.get("source_tag")
+        }
+        if video_chunk_tags and not any(tag in answer for tag in video_chunk_tags):
+            failures.append(f"answer did not cite a returned Video {video_id} transcript chunk")
+
+    for video_id in case.get("required_answer_source_videos", set()):
+        video_source_tags = {
+            source.get("source_tag")
+            for source in sources
+            if source.get("video_id") == video_id and source.get("source_tag")
+        }
+        if video_source_tags and not any(tag in answer for tag in video_source_tags):
+            failures.append(f"answer did not cite a returned Video {video_id} source")
 
     if not answer.strip():
         failures.append("answer was empty")
@@ -311,9 +393,18 @@ def run_assignment_evals(api_base: str, session_id: str) -> list[EvalResult]:
 
     results = []
     for case in ASSIGNMENT_EVALS:
-        answer, sources, events = _post_chat(api_base, session_id, case["question"])
+        answer, sources, events, route, retrieval_policy = _post_chat(api_base, session_id, case["question"])
         streamed_successfully = _streamed_successfully(events)
-        failures = validate_eval_case(case, answer, sources, status_metadata=status_metadata, events=events)
+        failures = validate_eval_case(
+            case,
+            answer,
+            sources,
+            status_metadata=status_metadata,
+            events=events,
+            route=route,
+            retrieval_policy=retrieval_policy,
+            enforce_route=True,
+        )
         results.append(
             EvalResult(
                 id=case["id"],
@@ -323,6 +414,8 @@ def run_assignment_evals(api_base: str, session_id: str) -> list[EvalResult]:
                 answer=answer,
                 sources=sources,
                 streamed_successfully=streamed_successfully,
+                route=route,
+                retrieval_policy=retrieval_policy,
             )
         )
     return results
@@ -337,6 +430,8 @@ def _print_text_report(results: list[EvalResult]) -> None:
                 print(f"  - {failure}")
         source_tags = [source.get("source_tag") for source in result.sources if source.get("source_tag")]
         print(f"  streamed: {result.streamed_successfully}")
+        print(f"  route: {result.route or 'unavailable'}")
+        print(f"  retrieval_policy: {result.retrieval_policy or 'none'}")
         print(f"  sources: {', '.join(source_tags) if source_tags else 'none'}")
         print(f"  answer: {result.answer[:240].strip()}")
         print()

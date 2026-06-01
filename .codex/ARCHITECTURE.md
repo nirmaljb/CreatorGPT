@@ -117,7 +117,7 @@ Payload indexes are created for `session_id`, `video_id`, and `is_hook`.
 - `POST /ingest`: accepts two video inputs and returns `session_id`.
 - `GET /status/{session_id}`: returns status, progress, errors, and metadata. If a `processing` session has not updated within `INGEST_STALE_SECONDS`, this endpoint marks it `failed`.
 - `GET /messages/{session_id}`: returns persisted chat history.
-- `POST /chat`: streams SSE events for sources, tokens, done, or errors. Accepts `completed` sessions and older `ready` sessions.
+- `POST /chat`: streams SSE events for sources, tokens, done, or errors. Accepts `completed` sessions and older `ready` sessions. `sources` and `done` events include `route` and `retrieval_policy` for route-aware evals.
 
 ## Chat Routing
 
@@ -135,6 +135,7 @@ Payload indexes are created for `session_id`, `video_id`, and `is_hook`.
 - `comparison_retrieval` retrieves `top_k=4` from Video A and `top_k=4` from Video B, then merges the context.
 - `FOLLOW_UP` resolves obvious references such as "their", "that video", and "what about B" from recent chat history, then re-routes.
 - Answers must cite exact source tags only, such as `[Video A metadata]` or `[Video B, chunk 0, 00:00-00:16]`.
+- Assignment evals assert the expected route and retrieval policy for each required question, not only that an answer streamed.
 
 ## Quality Gates
 
@@ -148,7 +149,10 @@ No auth in Phase 1. This is a single-user assignment demo. Production would add 
 
 ## Deployment Notes
 
-- Backend needs `GROQ_API_KEY`, `DATABASE_URL`, `QDRANT_URL`, and `QDRANT_API_KEY`.
+- Backend needs `GROQ_API_KEY`, `DATABASE_URL`, `QDRANT_URL`, and `QDRANT_API_KEY` for full ingest/chat behavior.
+- Qdrant startup validation is non-fatal by default. If Qdrant is unreachable, the API process still starts and `/health` returns `qdrant: false`; ingestion and transcript retrieval still require Qdrant and fail visibly.
+- Set `REQUIRE_QDRANT_ON_STARTUP=true` when deployment should fail fast if Qdrant cannot be validated.
+- `QDRANT_CHECK_COMPATIBILITY=false` by default suppresses Qdrant server-version probe warnings; collection existence, dimensions, and payload indexes are still checked when Qdrant is reachable.
 - `FORCE_REFRESH=true` bypasses extraction-cache reads when a demo needs fresh platform data.
 - `ffmpeg` is required for `yt-dlp` audio extraction before Groq Whisper transcription.
 - Runtime audio is written outside the repo by default to avoid reload loops.

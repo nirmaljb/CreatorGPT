@@ -13,6 +13,7 @@ Included in this phase:
 - Use named retrieval policies so comparison questions retrieve balanced Video A and Video B evidence.
 - Resolve simple follow-up questions from recent chat context before routing.
 - Add citation validation for metadata and transcript claims.
+- Expose chat route traces in SSE so evals can verify the selected path.
 - Add an eval script for the assignment's required question set.
 
 Out of scope for this phase:
@@ -32,7 +33,7 @@ Out of scope for this phase:
 - Why did Video A get more engagement than Video B?
 - Suggest improvements for B based on what worked in A.
 
-The eval uses the existing streaming `/chat` API. It validates that responses stream to a successful done event, answers are non-empty and cited, numeric answers match available Postgres-backed status metadata, unavailable metrics are stated as unavailable, metadata-only questions return metadata sources without transcript chunks, hook questions use first-5-second chunk sources, and mixed comparison questions include transcript evidence from both videos.
+The eval uses the existing streaming `/chat` API. It validates that responses stream to a successful done event, answers are non-empty and cited, each assignment question uses the expected route, retrieval policies match route expectations, numeric answers match available Postgres-backed status metadata, unavailable metrics are stated as unavailable, metadata-only questions return metadata sources without transcript chunks, hook answers cite hook chunks only, and mixed/improvement answers cite transcript evidence from both videos.
 
 Run it with:
 
@@ -54,6 +55,8 @@ Internal routes:
 - `MIXED_COMPARISON`: causal performance comparisons, such as why one video got more engagement. Uses Postgres metadata tools and Qdrant transcript chunks.
 - `IMPROVEMENT_SUGGESTION`: recommendation questions. Uses metadata, Video A evidence for what worked, and Video B evidence for improvement opportunities.
 - `FOLLOW_UP`: short/pronoun follow-ups. Resolves simple references such as "their", "that video", and "what about B" from recent chat history, then re-routes.
+
+The `/chat` stream includes `route` and `retrieval_policy` in the `sources` and `done` SSE payloads so the eval harness checks the real graph path used for each answer.
 
 ## Retrieval Policies
 

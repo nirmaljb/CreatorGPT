@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     qdrant_url: str = Field(default="", alias="QDRANT_URL")
     qdrant_api_key: str = Field(default="", alias="QDRANT_API_KEY")
     qdrant_collection: str = Field(default="creator_video_chunks", alias="QDRANT_COLLECTION")
+    require_qdrant_on_startup: bool = Field(default=False, alias="REQUIRE_QDRANT_ON_STARTUP")
+    qdrant_check_compatibility: bool = Field(default=False, alias="QDRANT_CHECK_COMPATIBILITY")
 
     embedding_provider: str = Field(default="fastembed", alias="EMBEDDING_PROVIDER")
     embedding_model: str = Field(default="BAAI/bge-small-en-v1.5", alias="EMBEDDING_MODEL")

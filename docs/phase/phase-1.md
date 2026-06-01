@@ -244,6 +244,8 @@ flowchart LR
 - Qdrant Cloud over local Docker:
   - More realistic cloud demo.
   - Requires payload indexes for filtered search.
+  - Startup validation is non-fatal by default so local development can boot during temporary Qdrant Cloud or DNS outages. `/health` reports `qdrant: false`; ingest/chat still fail visibly when Qdrant is required.
+  - Set `REQUIRE_QDRANT_ON_STARTUP=true` when a deployment should fail fast on Qdrant validation.
 
 - Neon Postgres over SQLite:
   - Durable persisted state that survives refreshes and looks closer to production.

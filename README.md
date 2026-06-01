@@ -125,6 +125,8 @@ Then fill in these required values in `.env`:
 | `QDRANT_API_KEY` | Qdrant Cloud API key |
 
 Optional values are already shown in [.env.example](.env.example).
+By default, the backend can start when Qdrant is temporarily unreachable and `/health` will show `qdrant: false`.
+Set `REQUIRE_QDRANT_ON_STARTUP=true` if you want startup to fail when Qdrant validation fails.
 
 ### 3. Install Backend
 

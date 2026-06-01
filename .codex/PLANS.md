@@ -37,6 +37,7 @@
 - Status reaches `completed` or a readable `failed` state.
 - Metadata cards render for both videos when available.
 - Per-video status explains platform/caption/download/transcription failures.
+- API startup can continue when Qdrant Cloud is temporarily unreachable, while `/health` reports `qdrant: false`; deployments can opt into fail-fast Qdrant validation with `REQUIRE_QDRANT_ON_STARTUP=true`.
 - Refreshing the frontend starts from a clean state instead of restoring a stale in-progress session.
 - Stalled background ingestion is surfaced as failed status after `INGEST_STALE_SECONDS`; automatic retry is deferred.
 - Chat streams and cites metadata/chunks.
@@ -53,6 +54,7 @@
 - Add named retrieval policies so comparison questions retrieve balanced Video A and Video B evidence.
 - Resolve simple follow-up references from recent chat history, then re-route.
 - Add citation validation.
+- Expose route and retrieval policy in chat SSE payloads so evals can assert the selected path directly.
 - Add an eval script for the assignment's expected question set before making further retrieval/chunking changes.
 
 ### Acceptance Criteria
@@ -63,6 +65,7 @@
 - Recommendation answers cite transcript evidence and metrics.
 - Improvement answers retrieve Video A evidence for what worked and Video B evidence for improvement opportunities.
 - Comparison and metadata-augmented routes retrieve `top_k=4` from Video A and `top_k=4` from Video B instead of one global `top_k=8` search.
+- Route-aware evals verify expected route, expected retrieval policy, citation shape, numeric values, and unavailable metric behavior.
 - Follow-up questions resolve obvious video references without using a full query-rewrite pipeline.
 - Eval script passes the assignment's core questions.
 
