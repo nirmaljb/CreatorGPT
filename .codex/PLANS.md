@@ -28,7 +28,7 @@
 - Store raw metadata, transcript source, chunk counts, cache flags, and per-video failure state.
 - Cache real extraction results for repeatable demos, with a `FORCE_REFRESH=true` escape hatch.
 - Store vectors in Qdrant with `video_id` and `session_id` payload filters.
-- Build minimal Next.js UI with two URL inputs, progress state, and streaming chat.
+- Build minimal Next.js UI with two URL inputs, progress state, clean refresh behavior, offline handling, and streaming chat.
 - Verify one full flow: ingest -> status complete -> chat -> cited answer.
 
 ### Acceptance Criteria
@@ -37,6 +37,8 @@
 - Status reaches `completed` or a readable `failed` state.
 - Metadata cards render for both videos when available.
 - Per-video status explains platform/caption/download/transcription failures.
+- Refreshing the frontend starts from a clean state instead of restoring a stale in-progress session.
+- Stalled background ingestion is surfaced as failed status after `INGEST_STALE_SECONDS`; automatic retry is deferred.
 - Chat streams and cites metadata/chunks.
 - Full flow works against live Neon, Qdrant, and Groq credentials.
 

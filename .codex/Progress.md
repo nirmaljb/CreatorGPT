@@ -84,6 +84,11 @@ Phase 1 implementation.
 - Updated engagement comparison metadata so a missing view denominator marks the comparison incomplete instead of declaring Video A the winner.
 - Tightened eval validation so unavailable Video B views or engagement cannot pass as `0 views` or `0%`.
 - Tightened citation formatting so prompts and evals require exact source tags instead of wrapper citations like `[source_tag: [Video A metadata]]` or fake tags like `[POSTGRES METADATA TOOL RESULTS]`.
+- Added a Phase 1 stale-ingest guard: `/status/{session_id}` marks old `processing` sessions as `failed` after `INGEST_STALE_SECONDS` and marks non-terminal video rows failed.
+- Changed the frontend refresh behavior so it clears the old localStorage session key and starts from a clean UI state instead of restoring a previous stuck session.
+- Added frontend offline/API-unreachable handling so status polling pauses with a connection message and resumes loading when the browser reports it is online again.
+- Documented the no-retry Phase 1 tradeoff and future explicit retry direction in `AGENTS.md`, `.codex/ARCHITECTURE.md`, `.codex/PLANS.md`, and `docs/phase/phase-1.md`.
+- Corrected the `AGENTS.md` operating workflow to point future agents at the existing root `AGENTS.md` file plus `.codex/Progress.md`.
 
 ## Current Next Step
 
@@ -155,3 +160,9 @@ Use `make ci` before PRs and run `python scripts/eval_assignment_questions.py --
 - `make ci` passed after the incomplete-engagement comparison fix; backend tests now report 31 selected tests plus the mocked smoke test.
 - `backend/.venv/bin/python -m pytest backend/tests/test_prompt.py backend/tests/test_assignment_eval.py` passed after tightening citation formatting.
 - `make ci` passed after tightening citation formatting; backend tests now report 33 selected tests plus the mocked smoke test.
+- `backend/.venv/bin/python -m pytest backend/tests/test_stale_ingest.py backend/tests/test_status_endpoint.py` passed after adding stale-session detection and status-route coverage.
+- `make ci` passed after the stale-session, clean-refresh, and frontend network handling changes; backend tests now report 37 selected tests plus the mocked smoke test.
+- `git diff --check` passed after the stale-session and clean-refresh changes.
+- `make frontend-lint` and `make frontend-typecheck` passed after adding frontend network console logging.
+- `make markdown-lint` and `git diff --check` passed after the latest docs updates.
+- Frontend dev server started at `http://localhost:3001`; an escalated `curl -I http://localhost:3001` returned HTTP 200.

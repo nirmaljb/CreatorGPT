@@ -9,6 +9,7 @@ Included in this phase:
 - FastAPI backend with ingest, status, health, messages, and streaming chat endpoints.
 - Next.js frontend with two configurable video URL inputs, progress state, metadata cards, and chat.
 - Background ingestion that returns a `session_id` immediately.
+- Fresh page loads start from an empty UI state instead of restoring the previous session.
 - Metadata extraction for two videos.
 - Platform-specific extractors for YouTube and Instagram.
 - Postgres extraction cache for repeatable demos, with `FORCE_REFRESH=true` to bypass cache reads.
@@ -27,6 +28,7 @@ Out of scope for this phase:
 
 - Auth and multi-tenant permissions.
 - Durable job queue.
+- Automatic retry or resume for failed/stalled ingestion jobs.
 - Redis.
 - Hybrid retrieval, reranking, and query classification beyond simple routing helpers.
 - Production observability.
@@ -115,6 +117,9 @@ flowchart TD
     Adaptive --> Status
     Decision -- Completed --> EnableChat[Enable chat]
     Decision -- Failed --> ShowError[Show failure state]
+    Status --> Stale{stale processing session?}
+    Stale -- Yes --> MarkFailed[Mark session failed]
+    MarkFailed --> Response
 ```
 
 ### Chat Flow
@@ -272,6 +277,19 @@ flowchart LR
 - Per-video failure state:
   - Makes Instagram/download/transcription failures visible in `/status`.
   - The system does not fabricate fallback metadata or transcript chunks when extraction fails.
+
+- Fresh page state over session auto-restore:
+  - Avoids showing an old stuck progress state after refresh during Phase 1 demos.
+  - Users start a new ingest manually after a malfunction.
+
+- Stale-session failure guard over automatic retry:
+  - `GET /status/{session_id}` marks old `processing` sessions as `failed` after `INGEST_STALE_SECONDS`.
+  - This surfaces stopped background tasks to the frontend without adding retry behavior yet.
+  - Future retry should be explicit and should preserve the original failure reason.
+
+- Frontend network handling over treating every fetch failure as ingest failure:
+  - Browser offline/API-unreachable states show a connection message and pause polling.
+  - Polling resumes when the browser comes back online.
 
 - FastAPI background task over durable queue:
   - Simple enough for the assignment demo.

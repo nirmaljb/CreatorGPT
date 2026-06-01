@@ -175,6 +175,15 @@ button:disabled {
   padding: 10px 12px;
 }
 
+.network-alert {
+  background: #fff8e8;
+  border: 1px solid #f2d38a;
+  border-radius: 8px;
+  color: #7b4a00;
+  margin: 10px 0 16px;
+  padding: 10px 12px;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: minmax(320px, 0.95fr) minmax(360px, 1.05fr);

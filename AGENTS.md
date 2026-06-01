@@ -2,7 +2,7 @@
 
 ## Operating Workflow
 
-- Before implementing any feature or fix, read `.codex/Agents.md` first and then read `.codex/Progress.md`.
+- Before implementing any feature or fix, read `AGENTS.md` first and then read `.codex/Progress.md`.
 - After each meaningful implementation chunk, update `.codex/Progress.md` with what changed, what was verified, and what remains.
 - Update this file when a planning or implementation decision changes the architecture, provider choices, schema, interfaces, or developer workflow.
 - For large work, create or update the relevant milestone in `.codex/PLANS.md` before implementation.
@@ -122,6 +122,9 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Qdrant startup now validates existing collection dimensions against `EMBEDDING_DIMENSIONS` so provider/model swaps fail with a clear error instead of during upsert.
 - Development CORS allows local frontend ports 3000 and 3001 because Next.js may move to 3001 when 3000 is already occupied.
 - Session status includes persisted progress fields: `current_step` and `progress_percent`. The frontend uses them to show ingestion progress and to poll adaptively instead of using a fixed short interval.
+- Phase 1 does not implement retry. A browser refresh starts a clean frontend state instead of restoring the previous `session_id`; a later retry flow should be explicit and should not silently resume a stale failed session.
+- `GET /status/{session_id}` marks long-stale `processing` sessions as `failed` after `INGEST_STALE_SECONDS`, so stopped background tasks surface as readable frontend errors instead of remaining stuck forever.
+- The frontend treats network loss separately from ingestion failure. Offline/API-unreachable polling pauses with a visible connection message and resumes status loading when the browser comes back online.
 - YouTube ingestion first tries `youtube-transcript-api` captions and normalizes captions into the same `{text, start, end}` shape as Whisper output. If captions are unavailable or the caption API fails, ingestion falls back to `yt-dlp` audio extraction plus Groq `whisper-large-v3`.
 - YouTube caption transcripts are not capped by `MAX_VIDEO_SECONDS`; long YouTube videos can ingest through captions without Whisper. `MAX_VIDEO_SECONDS` only limits audio download/Whisper fallback.
 - Per-video transcript/vector work now runs concurrently with `asyncio.gather` after both metadata rows are stored. Blocking operations run through `asyncio.to_thread`.

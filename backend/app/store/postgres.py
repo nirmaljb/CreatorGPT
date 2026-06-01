@@ -1,7 +1,17 @@
+import logging
+from datetime import datetime, timezone
+
 from sqlalchemy import select
 
 from backend.app.store.database import db_session
 from backend.app.store.models import ChatMessageModel, ExtractionCacheModel, SessionModel, VideoMetadataModel
+
+logger = logging.getLogger(__name__)
+
+TERMINAL_VIDEO_STATUSES = {"completed", "failed"}
+STALE_INGEST_MESSAGE = (
+    "Ingestion stalled because the background worker stopped before completion. Start a new ingest session."
+)
 
 
 def create_session(session_id: str) -> None:
@@ -43,6 +53,53 @@ def update_session_progress(session_id: str, current_step: str, progress_percent
         current_step=current_step,
         progress_percent=progress_percent,
     )
+
+
+def _aware_datetime(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def is_stale_processing_session(
+    status: str,
+    updated_at: datetime | None,
+    stale_after_seconds: int,
+    now: datetime | None = None,
+) -> bool:
+    if status != "processing" or updated_at is None or stale_after_seconds <= 0:
+        return False
+    current_time = _aware_datetime(now or datetime.now(timezone.utc))
+    updated_time = _aware_datetime(updated_at)
+    return (current_time - updated_time).total_seconds() >= stale_after_seconds
+
+
+def fail_stale_processing_session(session_id: str, stale_after_seconds: int) -> bool:
+    with db_session() as db:
+        row = db.get(SessionModel, session_id)
+        if row is None or not is_stale_processing_session(row.status, row.updated_at, stale_after_seconds):
+            return False
+
+        row.status = "failed"
+        row.error_message = STALE_INGEST_MESSAGE
+        row.current_step = "Failed: ingestion stalled"
+
+        videos = db.scalars(select(VideoMetadataModel).where(VideoMetadataModel.session_id == session_id)).all()
+        for video in videos:
+            if video.ingest_status in TERMINAL_VIDEO_STATUSES:
+                continue
+            video.ingest_status = "failed"
+            video.video_error_message = STALE_INGEST_MESSAGE
+            if not video.transcript_source:
+                video.transcript_source = "unavailable"
+
+        logger.warning(
+            "Marked stale ingest session failed session_id=%s stale_after_seconds=%s video_count=%s",
+            session_id,
+            stale_after_seconds,
+            len(videos),
+        )
+        return True
 
 
 def upsert_video_metadata(metadata: dict) -> None:

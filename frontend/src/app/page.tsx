@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 type Platform = "youtube" | "instagram";
 
@@ -62,6 +62,18 @@ type StatusResponse = {
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+const NETWORK_MESSAGE =
+  "Connection is unavailable. Status polling will resume when the browser is online and the API is reachable.";
+
+function toErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  return "Request failed";
+}
+
+function isNetworkError(error: unknown) {
+  return (typeof navigator !== "undefined" && !navigator.onLine) || error instanceof TypeError;
+}
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat("en", { notation: value >= 1000000 ? "compact" : "standard" }).format(value);
@@ -152,11 +164,14 @@ export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+  const [networkMessage, setNetworkMessage] = useState<string | null>(null);
 
   const videoA = useMemo(() => metadata.find((item) => item.video_id === "A"), [metadata]);
   const videoB = useMemo(() => metadata.find((item) => item.video_id === "B"), [metadata]);
   const isReady = status === "ready" || status === "completed";
-  const canIngest = videoInputs.every((video) => video.url.trim().length > 0) && status !== "processing";
+  const canIngest = videoInputs.every((video) => video.url.trim().length > 0) && status !== "processing" && isOnline;
+  const canChat = isReady && !isStreaming && isOnline;
 
   function updateVideoInput(videoId: "A" | "B", patch: Partial<VideoInputState>) {
     setVideoInputs((current) =>
@@ -164,21 +179,31 @@ export default function Home() {
     );
   }
 
-  async function loadStatus(id: string) {
+  const handleRequestError = useCallback((exception: unknown, fallback: string) => {
+    if (isNetworkError(exception)) {
+      console.warn("Network/API request failed; polling is paused until connectivity returns", exception);
+      setNetworkMessage(NETWORK_MESSAGE);
+      return;
+    }
+    setError(toErrorMessage(exception) || fallback);
+  }, []);
+
+  const loadStatus = useCallback(async (id: string) => {
     const response = await fetch(`${API_BASE}/status/${id}`, { cache: "no-store" });
     if (!response.ok) {
       throw new Error(`Status request failed: ${response.status}`);
     }
     const data: StatusResponse = await response.json();
+    setNetworkMessage(null);
     setStatus(data.status);
     setMetadata(data.metadata || []);
     setCurrentStep(data.current_step || data.status);
     setProgressPercent(data.progress_percent || 0);
     setError(data.error_message);
     return data;
-  }
+  }, []);
 
-  async function loadMessages(id: string) {
+  const loadMessages = useCallback(async (id: string) => {
     const response = await fetch(`${API_BASE}/messages/${id}`, { cache: "no-store" });
     if (!response.ok) return;
     const data = await response.json();
@@ -188,53 +213,84 @@ export default function Home() {
         sources: item.sources || []
       }))
     );
-  }
-
-  useEffect(() => {
-    const saved = window.localStorage.getItem("creator_session_id");
-    if (!saved) return;
-    setSessionId(saved);
-    loadStatus(saved).catch((exc) => setError(String(exc)));
-    loadMessages(saved).catch(() => undefined);
   }, []);
 
   useEffect(() => {
-    if (!sessionId || status !== "processing") return;
+    window.localStorage.removeItem("creator_session_id");
+    setIsOnline(window.navigator.onLine);
+
+    function handleOffline() {
+      console.warn("Browser reported offline; status polling paused");
+      setIsOnline(false);
+      setNetworkMessage(NETWORK_MESSAGE);
+    }
+
+    function handleOnline() {
+      console.info("Browser reported online; status polling will resume");
+      setIsOnline(true);
+      setNetworkMessage(null);
+    }
+
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!sessionId || !isOnline) return;
+    loadStatus(sessionId).catch((exc) => handleRequestError(exc, "Status request failed"));
+    loadMessages(sessionId).catch(() => undefined);
+  }, [handleRequestError, isOnline, loadMessages, loadStatus, sessionId]);
+
+  useEffect(() => {
+    if (!sessionId || status !== "processing" || !isOnline) return;
     const delay = progressPercent < 25 ? 2500 : progressPercent < 95 ? 8000 : 5000;
     const timeout = window.setTimeout(() => {
-      loadStatus(sessionId).catch((exc) => setError(String(exc)));
+      loadStatus(sessionId).catch((exc) => handleRequestError(exc, "Status request failed"));
     }, delay);
     return () => window.clearTimeout(timeout);
-  }, [sessionId, status, progressPercent]);
+  }, [handleRequestError, isOnline, loadStatus, sessionId, status, progressPercent]);
 
   async function handleIngest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!isOnline) {
+      setNetworkMessage("Connection is unavailable. Reconnect before starting a new ingest.");
+      return;
+    }
     setError(null);
+    setNetworkMessage(null);
     setMetadata([]);
     setMessages([]);
     setCurrentStep("Queued");
     setProgressPercent(0);
     setStatus("processing");
 
-    const response = await fetch(`${API_BASE}/ingest`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        videos: videoInputs.map((video) => ({
-          video_id: video.video_id,
-          platform: video.platform,
-          url: video.url.trim()
-        }))
-      })
-    });
-    if (!response.ok) {
+    try {
+      const response = await fetch(`${API_BASE}/ingest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          videos: videoInputs.map((video) => ({
+            video_id: video.video_id,
+            platform: video.platform,
+            url: video.url.trim()
+          }))
+        })
+      });
+      if (!response.ok) {
+        setStatus("idle");
+        setError(await response.text());
+        return;
+      }
+      const data = await response.json();
+      setSessionId(data.session_id);
+    } catch (exc) {
       setStatus("idle");
-      setError(await response.text());
-      return;
+      handleRequestError(exc, "Ingest request failed");
     }
-    const data = await response.json();
-    setSessionId(data.session_id);
-    window.localStorage.setItem("creator_session_id", data.session_id);
   }
 
   function updateDraft(id: string, content: string, sources: Source[]) {
@@ -245,7 +301,7 @@ export default function Home() {
 
   async function handleChat(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!sessionId || !chatInput.trim() || !isReady || isStreaming) return;
+    if (!sessionId || !chatInput.trim() || !canChat) return;
 
     const question = chatInput.trim();
     const draftId = `draft-${Date.now()}`;
@@ -257,6 +313,7 @@ export default function Home() {
     ]);
     setIsStreaming(true);
     setError(null);
+    setNetworkMessage(null);
 
     try {
       const response = await fetch(`${API_BASE}/chat`, {
@@ -303,7 +360,7 @@ export default function Home() {
       }
       await loadMessages(sessionId);
     } catch (exc) {
-      setError(String(exc));
+      handleRequestError(exc, "Chat request failed");
     } finally {
       setIsStreaming(false);
     }
@@ -362,6 +419,7 @@ export default function Home() {
       </form>
 
       {sessionId && <p className="session">Session: {sessionId}</p>}
+      {networkMessage && <p className="network-alert">{networkMessage}</p>}
       {error && <p className="error">{error}</p>}
 
       <section className="workspace">
@@ -396,10 +454,16 @@ export default function Home() {
             <input
               value={chatInput}
               onChange={(event) => setChatInput(event.target.value)}
-              disabled={!isReady || isStreaming}
-              placeholder={isReady ? "Ask about the two videos..." : "Ingest must finish before chat"}
+              disabled={!canChat}
+              placeholder={
+                isReady
+                  ? isOnline
+                    ? "Ask about the two videos..."
+                    : "Reconnect before chat"
+                  : "Ingest must finish before chat"
+              }
             />
-            <button type="submit" disabled={!isReady || isStreaming || !chatInput.trim()}>
+            <button type="submit" disabled={!canChat || !chatInput.trim()}>
               Send
             </button>
           </form>

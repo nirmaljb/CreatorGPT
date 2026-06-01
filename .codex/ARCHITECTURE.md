@@ -23,11 +23,13 @@
 8. Real extractor output is cached in Postgres unless `FORCE_REFRESH=true` bypasses cache reads for the run.
 9. Transcript chunks are embedded and stored in Qdrant with payload filters.
 10. Completed sessions move to `completed`; failed videos include per-video error details in status responses.
-11. `POST /chat` loads chat history and classifies the question as metadata, semantic, or mixed.
-12. Metadata questions use typed Postgres metadata tools only and do not query Qdrant.
-13. Semantic transcript questions retrieve transcript chunks from Qdrant.
-14. Mixed comparison questions use both typed Postgres metadata tools and Qdrant transcript retrieval.
-15. The backend streams a Groq answer with metadata and/or transcript citations. Compare questions that mention both videos retrieve chunks from each video.
+11. Stale `processing` sessions are marked `failed` from the status path after `INGEST_STALE_SECONDS`.
+12. The frontend does not restore a saved session on refresh; every page load starts with a clean UI state.
+13. `POST /chat` loads chat history and classifies the question as metadata, semantic, or mixed.
+14. Metadata questions use typed Postgres metadata tools only and do not query Qdrant.
+15. Semantic transcript questions retrieve transcript chunks from Qdrant.
+16. Mixed comparison questions use both typed Postgres metadata tools and Qdrant transcript retrieval.
+17. The backend streams a Groq answer with metadata and/or transcript citations. Compare questions that mention both videos retrieve chunks from each video.
 
 ## Database Schema
 
@@ -111,7 +113,7 @@ Payload indexes are created for `session_id`, `video_id`, and `is_hook`.
 
 - `GET /health`: checks API, Postgres, and Qdrant.
 - `POST /ingest`: accepts two video inputs and returns `session_id`.
-- `GET /status/{session_id}`: returns status, progress, errors, and metadata.
+- `GET /status/{session_id}`: returns status, progress, errors, and metadata. If a `processing` session has not updated within `INGEST_STALE_SECONDS`, this endpoint marks it `failed`.
 - `GET /messages/{session_id}`: returns persisted chat history.
 - `POST /chat`: streams SSE events for sources, tokens, done, or errors. Accepts `completed` sessions and older `ready` sessions.
 

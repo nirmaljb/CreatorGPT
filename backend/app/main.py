@@ -11,7 +11,7 @@ from backend.app.core.logging import configure_logging
 from backend.app.ingest.pipeline import ingest_session
 from backend.app.rag.service import stream_rag_response
 from backend.app.store import database
-from backend.app.store.postgres import create_session, get_chat_messages, get_session
+from backend.app.store.postgres import create_session, fail_stale_processing_session, get_chat_messages, get_session
 from backend.app.store.vector import ensure_collection
 from backend.app.store.vector import health_check as qdrant_health_check
 
@@ -75,6 +75,11 @@ def status(session_id: str) -> dict:
     row = get_session(session_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Session not found")
+    if row["status"] == "processing":
+        fail_stale_processing_session(session_id, settings.ingest_stale_seconds)
+        row = get_session(session_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Session not found")
     return row
 
 

@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     embedding_dimensions: int = Field(default=384, alias="EMBEDDING_DIMENSIONS")
 
     max_video_seconds: int = Field(default=600, alias="MAX_VIDEO_SECONDS")
+    ingest_stale_seconds: int = Field(default=900, alias="INGEST_STALE_SECONDS")
     tmp_dir: str = Field(default="/private/tmp/creator-rag", alias="TMP_DIR")
     force_refresh: bool = Field(default=False, alias="FORCE_REFRESH")
 
