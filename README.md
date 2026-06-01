@@ -59,17 +59,38 @@ Add a short GIF or video here that shows:
 
 ## High-Level Pipeline
 
-1. The user enters two URLs: one YouTube video and one Instagram Reel.
-2. `POST /ingest` creates a session and returns `session_id` immediately.
-3. The backend extracts real metadata for both videos and stores it in Postgres.
-4. The backend gets transcripts. YouTube tries captions first. If captions are missing, the backend uses Groq Whisper. Instagram uses the audio plus Groq Whisper path.
-5. Transcript text is split into chunks. Chunks are embedded and stored in Qdrant with `session_id` and `video_id` filters.
-6. `GET /status/{session_id}` shows progress and eventually reaches `completed` or a clear failed state.
-7. `POST /chat` classifies the question:
-   - numeric and creator questions use Postgres metadata only
-   - transcript questions use Qdrant retrieval
-   - mixed comparison questions use both
-8. The answer streams back with source citations such as `[Video A metadata]` or `[Video B, chunk 2, 00:12-00:24]`.
+```mermaid
+flowchart TD
+    A[User enters YouTube URL and Instagram Reel URL]
+    B[POST /ingest]
+    C[Create session and return session_id immediately]
+    D[Extract real metadata for both videos]
+    E[Store metadata and raw metadata in Postgres]
+    F{Transcript path}
+    G[YouTube captions]
+    H[Groq Whisper transcription]
+    I[Split transcripts into chunks]
+    J[Embed chunks with FastEmbed]
+    K[Store searchable chunks in Qdrant]
+    L[GET /status/{session_id}]
+    M[Session reaches completed or clear failed state]
+    N[POST /chat]
+    O{Question type}
+    P[Numeric or creator question<br/>Use Postgres metadata only]
+    Q[Transcript question<br/>Use Qdrant retrieval]
+    R[Mixed comparison question<br/>Use Postgres metadata and Qdrant]
+    S[Stream answer with source citations]
+
+    A --> B --> C --> D --> E --> F
+    F -->|YouTube captions available| G
+    F -->|Captions unavailable or Instagram| H
+    G --> I
+    H --> I
+    I --> J --> K --> L --> M --> N --> O
+    O --> P --> S
+    O --> Q --> S
+    O --> R --> S
+```
 
 The app should not silently fall back to fake data. If a provider fails, the session or video should show a clear error.
 

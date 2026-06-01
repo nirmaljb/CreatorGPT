@@ -75,6 +75,7 @@ Phase 1 implementation.
 - Added `.github/workflows/ci.yml` and `.github/pull_request_template.md` so required CI is provider-mocked and does not require Groq, Qdrant Cloud, Neon, YouTube, or Instagram.
 - Added `backend/tests/test_mocked_smoke.py` to patch API dependencies and verify ingest -> status -> streamed chat without external providers.
 - Reworked `README.md` into a cleaner project entry point with a demo placeholder, documentation map, technology table, high-level pipeline, installation guide, checks, and eval commands.
+- Changed the README high-level pipeline from an ordered list to a Mermaid flowchart.
 
 ## Current Next Step
 
@@ -138,3 +139,4 @@ Use `make ci` before PRs and run `python scripts/eval_assignment_questions.py --
 - `make ci` passed end to end.
 - `PRE_COMMIT_HOME=/private/tmp/creator-rag-pre-commit backend/.venv/bin/pre-commit run --all-files` passed. The explicit cache path avoids sandbox writes to `~/.cache/pre-commit`.
 - `make markdown-lint` passed after the README refresh.
+- `make markdown-lint` passed after changing the README high-level pipeline to Mermaid.
