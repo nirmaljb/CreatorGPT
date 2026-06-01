@@ -61,25 +61,25 @@ Add a short GIF or video here that shows:
 
 ```mermaid
 flowchart TD
-    A[User enters YouTube URL and Instagram Reel URL]
-    B[POST /ingest]
-    C[Create session and return session_id immediately]
-    D[Extract real metadata for both videos]
-    E[Store metadata and raw metadata in Postgres]
+    A["User enters YouTube URL and Instagram Reel URL"]
+    B["POST /ingest"]
+    C["Create session and return session_id immediately"]
+    D["Extract real metadata for both videos"]
+    E["Store metadata and raw metadata in Postgres"]
     F{Transcript path}
-    G[YouTube captions]
-    H[Groq Whisper transcription]
-    I[Split transcripts into chunks]
-    J[Embed chunks with FastEmbed]
-    K[Store searchable chunks in Qdrant]
-    L[GET /status/{session_id}]
-    M[Session reaches completed or clear failed state]
-    N[POST /chat]
+    G["YouTube captions"]
+    H["Groq Whisper transcription"]
+    I["Split transcripts into chunks"]
+    J["Embed chunks with FastEmbed"]
+    K["Store searchable chunks in Qdrant"]
+    L["GET /status/{session_id}"]
+    M["Session reaches completed or clear failed state"]
+    N["POST /chat"]
     O{Question type}
-    P[Numeric or creator question<br/>Use Postgres metadata only]
-    Q[Transcript question<br/>Use Qdrant retrieval]
-    R[Mixed comparison question<br/>Use Postgres metadata and Qdrant]
-    S[Stream answer with source citations]
+    P["Numeric or creator question<br/>Use Postgres metadata only"]
+    Q["Transcript question<br/>Use Qdrant retrieval"]
+    R["Mixed comparison question<br/>Use Postgres metadata and Qdrant"]
+    S["Stream answer with source citations"]
 
     A --> B --> C --> D --> E --> F
     F -->|YouTube captions available| G
