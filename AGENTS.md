@@ -32,7 +32,7 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 
 ### Phase 2 — Grounded Intelligence
 
-- Add LangGraph routing for numeric, semantic, hook, and recommendation questions.
+- Add rules-first LangGraph routing for metadata, transcript, hook, mixed comparison, improvement, and follow-up questions.
 - Use typed metadata tools instead of a free-form SQL agent.
 - Use transcript retrieval only for semantic questions.
 - Use first-5-second chunks for hook comparison.
@@ -108,7 +108,10 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - The chat path uses LangGraph for durable retrieval orchestration, then streams Groq tokens through a small provider wrapper so OpenAI can replace Groq later with minimal changes.
 - Compare questions that mention both Video A and Video B retrieve chunks from both videos; single-video questions stay filtered to that video.
 - Numeric and creator metadata questions must bypass Qdrant retrieval and use typed Postgres metadata tools only: `get_video_metrics`, `get_creator_info`, `get_engagement_comparison`, and `get_session_video_summary`.
-- Semantic transcript questions use Qdrant retrieval. Mixed comparison questions use the Postgres metadata tools plus Qdrant retrieval.
+- Phase 2 uses deterministic route labels: `METADATA_ONLY`, `TRANSCRIPT_ONLY`, `HOOK_COMPARISON`, `MIXED_COMPARISON`, `IMPROVEMENT_SUGGESTION`, and `FOLLOW_UP`.
+- The Phase 2 router is rules-first, not LLM-classified. This keeps assignment routing deterministic, cheap, and unit-testable; add an LLM classifier only if evals prove the rules are insufficient.
+- `FOLLOW_UP` handling is intentionally minimal: resolve obvious references like "their", "that video", and "what about B" from recent chat history, then re-route the resolved question.
+- Semantic transcript questions use Qdrant retrieval. Mixed comparison and improvement questions use the Postgres metadata tools plus Qdrant retrieval.
 - Mixed comparison answers must cite transcript chunk evidence when chunks are retrieved, not only metadata metrics.
 - Assignment evals are run through `scripts/eval_assignment_questions.py`; reusable logic lives in `backend.evals.assignment_eval` for later mocked CI coverage.
 - Required CI runs backend Ruff lint, backend Pytest tests, frontend ESLint, frontend TypeScript typecheck, frontend build, markdown lint, and a provider-mocked smoke test.

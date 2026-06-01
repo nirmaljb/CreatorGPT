@@ -117,17 +117,33 @@ def _history_messages(history: list[dict]) -> list[dict]:
 
 
 def _answer_requirements(route: str, chunks: list[dict]) -> str:
-    if route == "metadata":
+    if route in {"metadata", "METADATA_ONLY"}:
         return (
             "This is a metadata route. Do not use transcript chunks. "
             "Cite numeric and creator facts with metadata source tags."
         )
-    if route == "mixed" and chunks:
+    if route == "HOOK_COMPARISON":
+        return (
+            "This is a hook comparison route. Use only returned chunks marked is_hook true. "
+            "Compare the first 5 seconds and cite returned transcript chunk source tags from both videos if available."
+        )
+    if route in {"mixed", "MIXED_COMPARISON"} and chunks:
         return (
             "This is a mixed route. Use metadata for metrics and transcript chunks for content reasons. "
             "Cite at least one returned transcript chunk source tag in the answer. "
             "When comparing Video A and Video B, cite transcript chunks from both videos if available. "
             "If a metric is unavailable, say unavailable instead of treating 0 as a real value."
+        )
+    if route == "IMPROVEMENT_SUGGESTION" and chunks:
+        return (
+            "This is an improvement suggestion route. Use metadata for performance context, "
+            "Video A chunks for evidence of what worked, and Video B chunks for improvement opportunities. "
+            "Cite metadata and returned transcript chunk source tags from both videos if available. "
+            "If a metric is unavailable, say unavailable instead of treating 0 as a real value."
+        )
+    if route == "TRANSCRIPT_ONLY" and chunks:
+        return (
+            "This is a transcript route. Use transcript chunks for content claims and cite returned chunk source tags."
         )
     if chunks:
         return "Use transcript chunks for content claims and cite returned transcript chunk source tags."

@@ -25,11 +25,13 @@
 10. Completed sessions move to `completed`; failed videos include per-video error details in status responses.
 11. Stale `processing` sessions are marked `failed` from the status path after `INGEST_STALE_SECONDS`.
 12. The frontend does not restore a saved session on refresh; every page load starts with a clean UI state.
-13. `POST /chat` loads chat history and classifies the question as metadata, semantic, or mixed.
-14. Metadata questions use typed Postgres metadata tools only and do not query Qdrant.
-15. Semantic transcript questions retrieve transcript chunks from Qdrant.
-16. Mixed comparison questions use both typed Postgres metadata tools and Qdrant transcript retrieval.
-17. The backend streams a Groq answer with metadata and/or transcript citations. Compare questions that mention both videos retrieve chunks from each video.
+13. `POST /chat` loads chat history and classifies the question with a rules-first LangGraph router.
+14. Follow-up questions resolve simple video references from chat history before being re-routed.
+15. Metadata questions use typed Postgres metadata tools only and do not query Qdrant.
+16. Semantic transcript questions retrieve transcript chunks from Qdrant.
+17. Hook comparison questions retrieve Qdrant chunks with `is_hook=true`.
+18. Mixed comparison and improvement questions use typed Postgres metadata tools plus Qdrant transcript retrieval.
+19. The backend streams a Groq answer with metadata and/or transcript citations. Compare questions that mention both videos retrieve chunks from each video.
 
 ## Database Schema
 
@@ -123,9 +125,13 @@ Payload indexes are created for `session_id`, `video_id`, and `is_hook`.
 - `get_creator_info(session_id, video_id)`: Postgres metadata tool for creator and follower count.
 - `get_engagement_comparison(session_id)`: Postgres metadata tool for engagement-rate comparison.
 - `get_session_video_summary(session_id)`: Postgres metadata tool for broad metadata summaries.
-- Numeric and creator metadata questions bypass Qdrant entirely.
-- Transcript and hook questions use Qdrant retrieval.
-- Mixed comparison questions combine metadata tool results with Qdrant chunks and require transcript chunk citations when chunks were retrieved.
+- The router uses deterministic internal route labels: `METADATA_ONLY`, `TRANSCRIPT_ONLY`, `HOOK_COMPARISON`, `MIXED_COMPARISON`, `IMPROVEMENT_SUGGESTION`, and `FOLLOW_UP`.
+- `METADATA_ONLY` bypasses Qdrant entirely.
+- `TRANSCRIPT_ONLY` uses Qdrant transcript retrieval.
+- `HOOK_COMPARISON` uses Qdrant retrieval with the `is_hook=true` payload filter.
+- `MIXED_COMPARISON` combines metadata tool results with Qdrant chunks and requires transcript chunk citations when chunks were retrieved.
+- `IMPROVEMENT_SUGGESTION` retrieves targeted Video A evidence for what worked and Video B evidence for improvement opportunities.
+- `FOLLOW_UP` resolves obvious references such as "their", "that video", and "what about B" from recent chat history, then re-routes.
 - Answers must cite exact source tags only, such as `[Video A metadata]` or `[Video B, chunk 0, 00:00-00:16]`.
 
 ## Quality Gates

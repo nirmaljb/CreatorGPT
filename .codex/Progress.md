@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 1 implementation.
+Phase 2 implementation.
 
 ## Current Status
 
@@ -15,6 +15,7 @@ Phase 1 implementation.
 - Live ingest and chat smoke tests pass after the YouTube transcript fast-path and async ingestion changes.
 - Project docs have been moved under `.codex/`.
 - Phase documentation is tracked under `docs/phase/`; Phase 1 now includes high-level Mermaid flow diagrams.
+- Phase 2 router implementation is in progress with explicit route labels and rules-first classification.
 
 ## Completed Chunks
 
@@ -89,6 +90,11 @@ Phase 1 implementation.
 - Added frontend offline/API-unreachable handling so status polling pauses with a connection message and resumes loading when the browser reports it is online again.
 - Documented the no-retry Phase 1 tradeoff and future explicit retry direction in `AGENTS.md`, `.codex/ARCHITECTURE.md`, `.codex/PLANS.md`, and `docs/phase/phase-1.md`.
 - Corrected the `AGENTS.md` operating workflow to point future agents at the existing root `AGENTS.md` file plus `.codex/Progress.md`.
+- Added the Phase 2 rules-first LangGraph router with explicit `METADATA_ONLY`, `TRANSCRIPT_ONLY`, `HOOK_COMPARISON`, `MIXED_COMPARISON`, `IMPROVEMENT_SUGGESTION`, and `FOLLOW_UP` routes.
+- Changed the RAG graph from a mostly linear flow to conditional routing: metadata-only paths end after typed Postgres tools, hook paths retrieve `is_hook=true` chunks, and mixed/improvement paths combine metadata tools with transcript retrieval.
+- Added minimal follow-up resolution for obvious video references such as "their", "that video", and "what about B", then re-route the resolved question.
+- Updated route-specific prompt requirements for hook, mixed, improvement, transcript, and metadata-only answers.
+- Updated Phase 2 documentation, architecture notes, milestone notes, and agent decisions with the rules-first router tradeoff.
 
 ## Current Next Step
 
@@ -96,7 +102,7 @@ Use `make ci` before PRs and run `python scripts/eval_assignment_questions.py --
 
 ## Known Issues
 
-- None currently blocking Phase 1.
+- None currently blocking Phase 2.
 
 ## Manual Test Results
 
@@ -166,3 +172,8 @@ Use `make ci` before PRs and run `python scripts/eval_assignment_questions.py --
 - `make frontend-lint` and `make frontend-typecheck` passed after adding frontend network console logging.
 - `make markdown-lint` and `git diff --check` passed after the latest docs updates.
 - Frontend dev server started at `http://localhost:3001`; an escalated `curl -I http://localhost:3001` returned HTTP 200.
+- `backend/.venv/bin/python -m pytest backend/tests/test_rag_graph.py backend/tests/test_prompt.py` passed after the explicit Phase 2 route implementation.
+- `make ci` passed after the Phase 2 rules-first router implementation; backend tests now report 44 selected tests plus the mocked smoke test.
+- `git diff --check` passed after the Phase 2 router implementation.
+- A classifier smoke check mapped the five assignment questions to `METADATA_ONLY`, `METADATA_ONLY`, `HOOK_COMPARISON`, `MIXED_COMPARISON`, and `IMPROVEMENT_SUGGESTION`.
+- `backend/.venv/bin/python scripts/eval_assignment_questions.py --api-base http://127.0.0.1:8000 --session-id 4920d31a-0ee2-4d00-8b5b-e61d3e7a470c` passed all five live assignment eval questions after the Phase 2 router implementation.

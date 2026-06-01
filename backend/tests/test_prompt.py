@@ -22,7 +22,7 @@ class PromptTests(unittest.TestCase):
                 }
             ],
             history=[],
-            route="mixed",
+            route="MIXED_COMPARISON",
         )
 
         user_message = messages[-1]["content"]
@@ -48,7 +48,7 @@ class PromptTests(unittest.TestCase):
             ],
             chunks=[],
             history=[],
-            route="metadata",
+            route="METADATA_ONLY",
         )
 
         user_message = messages[-1]["content"]
@@ -82,7 +82,7 @@ class PromptTests(unittest.TestCase):
             metadata_tool_results=[],
             chunks=[],
             history=[],
-            route="metadata",
+            route="METADATA_ONLY",
         )
 
         user_message = messages[-1]["content"]
@@ -90,6 +90,65 @@ class PromptTests(unittest.TestCase):
         self.assertIn("views: unavailable", user_message)
         self.assertIn("creator_followers: unavailable", user_message)
         self.assertIn("engagement_rate_percent: unavailable", user_message)
+
+    def test_hook_route_requirements_are_specific_to_first_five_seconds(self) -> None:
+        messages = build_chat_messages(
+            query="Compare the hooks in the first 5 seconds.",
+            metadata=[],
+            metadata_tool_results=[],
+            chunks=[
+                {
+                    "video_id": "B",
+                    "chunk_index": 0,
+                    "start_time": 0.0,
+                    "end_time": 4.0,
+                    "source_tag": "[Video B, chunk 0, 00:00-00:04]",
+                    "is_hook": True,
+                    "transcript_source": "whisper",
+                    "text": "Immediate hook.",
+                }
+            ],
+            history=[],
+            route="HOOK_COMPARISON",
+        )
+
+        self.assertIn("Use only returned chunks marked is_hook true", messages[-1]["content"])
+
+    def test_improvement_route_requires_a_and_b_chunk_evidence(self) -> None:
+        messages = build_chat_messages(
+            query="Suggest improvements for B based on what worked in A.",
+            metadata=[],
+            metadata_tool_results=[],
+            chunks=[
+                {
+                    "video_id": "A",
+                    "chunk_index": 0,
+                    "start_time": 0.0,
+                    "end_time": 4.0,
+                    "source_tag": "[Video A, chunk 0, 00:00-00:04]",
+                    "is_hook": True,
+                    "transcript_source": "captions",
+                    "text": "Strong hook.",
+                },
+                {
+                    "video_id": "B",
+                    "chunk_index": 0,
+                    "start_time": 0.0,
+                    "end_time": 4.0,
+                    "source_tag": "[Video B, chunk 0, 00:00-00:04]",
+                    "is_hook": True,
+                    "transcript_source": "whisper",
+                    "text": "Weak hook.",
+                },
+            ],
+            history=[],
+            route="IMPROVEMENT_SUGGESTION",
+        )
+
+        user_message = messages[-1]["content"]
+
+        self.assertIn("Video A chunks for evidence of what worked", user_message)
+        self.assertIn("Video B chunks for improvement opportunities", user_message)
 
 
 if __name__ == "__main__":

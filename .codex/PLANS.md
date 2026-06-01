@@ -46,10 +46,11 @@
 
 ### Milestones
 
-- Add LangGraph routing for numeric, semantic, hook, and recommendation questions.
+- Add rules-first LangGraph routing for metadata, transcript, hook, mixed comparison, improvement, and follow-up questions.
 - Use typed Postgres metadata tools for numeric and creator/follower questions.
 - Use transcript retrieval only for semantic and recommendation questions.
 - Restrict hook comparison to first-5-second chunks.
+- Resolve simple follow-up references from recent chat history, then re-route.
 - Add citation validation.
 - Add an eval script for the assignment's expected question set before making further retrieval/chunking changes.
 
@@ -59,6 +60,8 @@
 - Numeric and creator questions bypass Qdrant retrieval entirely.
 - Hook questions cite hook chunks only.
 - Recommendation answers cite transcript evidence and metrics.
+- Improvement answers retrieve Video A evidence for what worked and Video B evidence for improvement opportunities.
+- Follow-up questions resolve obvious video references without using a full query-rewrite pipeline.
 - Eval script passes the assignment's core questions.
 
 ## Phase 3 — Product UI

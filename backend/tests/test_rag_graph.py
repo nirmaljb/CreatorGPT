@@ -1,38 +1,46 @@
 import unittest
 from unittest.mock import patch
 
-from backend.app.rag.graph import _detect_video_ids, classify_query, retrieve_chunks, run_metadata_tools
+from backend.app.rag.graph import (
+    FOLLOW_UP,
+    HOOK_COMPARISON,
+    IMPROVEMENT_SUGGESTION,
+    METADATA_ONLY,
+    MIXED_COMPARISON,
+    TRANSCRIPT_ONLY,
+    _detect_video_ids,
+    classify_query,
+    resolve_follow_up,
+    resolve_follow_up_query,
+    retrieve_chunks,
+    run_metadata_tools,
+)
 
 
 class RagGraphRoutingTests(unittest.TestCase):
-    def test_detects_both_videos_when_comparing(self) -> None:
+    def test_detects_video_references(self) -> None:
         self.assertEqual(_detect_video_ids("Compare Video A and Video B"), {"A", "B"})
         self.assertEqual(_detect_video_ids("Suggest improvements for B based on what worked in A."), {"A", "B"})
         self.assertEqual(_detect_video_ids("What happens in Video B?"), {"B"})
+        self.assertEqual(_detect_video_ids("What did A say?"), {"A"})
         self.assertEqual(_detect_video_ids("Summarize the transcript"), set())
 
-    def test_compare_query_retrieves_chunks_for_both_videos(self) -> None:
-        with patch("backend.app.rag.graph.retrieve") as mocked_retrieve:
-            mocked_retrieve.side_effect = lambda **kwargs: [kwargs]
+    def test_assignment_questions_route_to_explicit_paths(self) -> None:
+        cases = {
+            "What's the engagement rate of each?": METADATA_ONLY,
+            "Who is the creator of Video B and what is their follower count?": METADATA_ONLY,
+            "Compare the hooks in the first 5 seconds.": HOOK_COMPARISON,
+            "Why did Video A get more engagement than Video B?": MIXED_COMPARISON,
+            "Suggest improvements for B based on what worked in A.": IMPROVEMENT_SUGGESTION,
+        }
 
-            state = retrieve_chunks(
-                {"session_id": "session-1", "query": "Compare Video A and Video B", "route": "mixed"}
-            )
-
-        self.assertEqual([chunk["video_id"] for chunk in state["chunks"]], ["A", "B"])
-        self.assertEqual(mocked_retrieve.call_count, 2)
-
-    def test_numeric_metadata_queries_are_metadata_route(self) -> None:
-        questions = [
-            "What's the engagement rate of each?",
-            "Who's the creator of Video B?",
-            "What's their follower count?",
-            "How many views did Video A have?",
-        ]
-
-        for question in questions:
+        for question, expected_route in cases.items():
             with self.subTest(question=question):
-                self.assertEqual(classify_query(question), "metadata")
+                self.assertEqual(classify_query(question), expected_route)
+
+    def test_transcript_question_routes_to_transcript_only(self) -> None:
+        self.assertEqual(classify_query("What does Video B discuss?"), TRANSCRIPT_ONLY)
+        self.assertEqual(classify_query("Compare the topics in Video A and Video B."), TRANSCRIPT_ONLY)
 
     def test_metadata_route_does_not_call_qdrant_retrieve(self) -> None:
         with patch("backend.app.rag.graph.retrieve") as mocked_retrieve:
@@ -40,36 +48,70 @@ class RagGraphRoutingTests(unittest.TestCase):
                 {
                     "session_id": "session-1",
                     "query": "How many views did Video A have?",
-                    "route": "metadata",
+                    "route": METADATA_ONLY,
                 }
             )
 
         self.assertEqual(state["chunks"], [])
         mocked_retrieve.assert_not_called()
 
-    def test_mixed_question_uses_vector_retrieval(self) -> None:
-        self.assertEqual(classify_query("Compare Video A and Video B using transcript evidence"), "mixed")
-        self.assertEqual(classify_query("Suggest improvements for B based on what worked in A."), "mixed")
-
+    def test_hook_comparison_uses_hook_filter_for_both_videos(self) -> None:
         with patch("backend.app.rag.graph.retrieve") as mocked_retrieve:
             mocked_retrieve.side_effect = lambda **kwargs: [kwargs]
             state = retrieve_chunks(
                 {
                     "session_id": "session-1",
-                    "query": "Compare Video A and Video B using transcript evidence",
-                    "route": "mixed",
+                    "query": "Compare the hooks in the first 5 seconds.",
+                    "route": HOOK_COMPARISON,
                 }
             )
 
         self.assertEqual([chunk["video_id"] for chunk in state["chunks"]], ["A", "B"])
+        self.assertEqual([chunk["hook_only"] for chunk in state["chunks"]], [True, True])
         self.assertEqual(mocked_retrieve.call_count, 2)
+
+    def test_mixed_question_uses_vector_retrieval_for_both_videos(self) -> None:
+        with patch("backend.app.rag.graph.retrieve") as mocked_retrieve:
+            mocked_retrieve.side_effect = lambda **kwargs: [kwargs]
+            state = retrieve_chunks(
+                {
+                    "session_id": "session-1",
+                    "query": "Why did Video A get more engagement than Video B?",
+                    "route": MIXED_COMPARISON,
+                }
+            )
+
+        self.assertEqual([chunk["video_id"] for chunk in state["chunks"]], ["A", "B"])
+        self.assertEqual([chunk["hook_only"] for chunk in state["chunks"]], [False, False])
+        self.assertEqual(mocked_retrieve.call_count, 2)
+
+    def test_improvement_route_retrieves_strong_a_and_weak_b_evidence(self) -> None:
+        with patch("backend.app.rag.graph.retrieve") as mocked_retrieve:
+            mocked_retrieve.side_effect = lambda **kwargs: [kwargs]
+            state = retrieve_chunks(
+                {
+                    "session_id": "session-1",
+                    "query": "Suggest improvements for B based on what worked in A.",
+                    "route": IMPROVEMENT_SUGGESTION,
+                }
+            )
+
+        self.assertEqual([chunk["video_id"] for chunk in state["chunks"]], ["A", "B"])
+        self.assertIn("strong evidence", state["chunks"][0]["query"])
+        self.assertIn("improvement opportunity", state["chunks"][1]["query"])
 
     def test_metadata_tool_selection_uses_postgres_tools(self) -> None:
         with (
             patch("backend.app.rag.graph.get_engagement_comparison", return_value={"videos": []}) as engagement,
             patch("backend.app.rag.graph.get_video_metrics", return_value=[]) as metrics,
         ):
-            state = run_metadata_tools({"session_id": "session-1", "query": "What's the engagement rate of each?"})
+            state = run_metadata_tools(
+                {
+                    "session_id": "session-1",
+                    "query": "What's the engagement rate of each?",
+                    "route": METADATA_ONLY,
+                }
+            )
 
         self.assertEqual([item["tool"] for item in state["metadata_tool_results"]], ["get_engagement_comparison"])
         engagement.assert_called_once_with("session-1")
@@ -77,10 +119,56 @@ class RagGraphRoutingTests(unittest.TestCase):
 
     def test_creator_tool_can_target_single_video(self) -> None:
         with patch("backend.app.rag.graph.get_creator_info", return_value={"video_id": "B"}) as creator:
-            state = run_metadata_tools({"session_id": "session-1", "query": "Who's the creator of Video B?"})
+            state = run_metadata_tools(
+                {"session_id": "session-1", "query": "Who's the creator of Video B?", "route": METADATA_ONLY}
+            )
 
         self.assertEqual(state["metadata_tool_results"][0]["tool"], "get_creator_info")
         creator.assert_called_once_with("session-1", "B")
+
+    def test_improvement_route_always_includes_engagement_and_summary_tools(self) -> None:
+        with (
+            patch("backend.app.rag.graph.get_engagement_comparison", return_value={"videos": []}) as engagement,
+            patch("backend.app.rag.graph.get_session_video_summary", return_value=[]) as summary,
+        ):
+            state = run_metadata_tools(
+                {
+                    "session_id": "session-1",
+                    "query": "Suggest improvements for B based on what worked in A.",
+                    "route": IMPROVEMENT_SUGGESTION,
+                }
+            )
+
+        self.assertEqual(
+            [item["tool"] for item in state["metadata_tool_results"]],
+            ["get_engagement_comparison", "get_session_video_summary"],
+        )
+        engagement.assert_called_once_with("session-1")
+        summary.assert_called_once_with("session-1")
+
+    def test_follow_up_question_is_detected_and_resolved_to_previous_video(self) -> None:
+        history = [{"role": "user", "content": "Who is the creator of Video B?"}]
+
+        self.assertEqual(classify_query("What's their follower count?", history=history), FOLLOW_UP)
+        self.assertEqual(
+            resolve_follow_up_query("What's their follower count?", history),
+            "What's their follower count for Video B?",
+        )
+
+    def test_what_about_follow_up_reuses_previous_question_topic(self) -> None:
+        history = [{"role": "user", "content": "Who is the creator of Video A?"}]
+
+        state = resolve_follow_up(
+            {
+                "session_id": "session-1",
+                "query": "What about B?",
+                "history": history,
+                "route": FOLLOW_UP,
+            }
+        )
+
+        self.assertEqual(state["resolved_query"], "Who is the creator of Video B?")
+        self.assertEqual(state["route"], METADATA_ONLY)
 
 
 if __name__ == "__main__":
