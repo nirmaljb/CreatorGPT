@@ -53,6 +53,13 @@ METADATA_TERMS = {
     "upload",
     "hashtag",
     "hashtags",
+    "share",
+    "shares",
+    "save",
+    "saves",
+    "stat",
+    "stats",
+    "scorecard",
 }
 CONTENT_TERMS = {
     "discuss",
@@ -75,10 +82,33 @@ CONTENT_TERMS = {
     "pacing",
 }
 HOOK_TERMS = {"hook", "hooks", "first 5", "first five", "opening", "intro"}
-IMPROVEMENT_TERMS = {"improve", "improvement", "improvements", "recommend", "recommendation", "suggest"}
+IMPROVEMENT_TERMS = {
+    "change",
+    "changes",
+    "fix",
+    "improve",
+    "improvement",
+    "improvements",
+    "recommend",
+    "recommendation",
+    "remake",
+    "suggest",
+}
 COMPARISON_TERMS = {"compare", "comparison", "versus", "vs", "better", "worse", "more", "less", "higher", "lower"}
 CAUSAL_TERMS = {"why", "reason", "reasons", "because", "drove", "drive", "worked", "perform", "performed"}
 PERFORMANCE_TERMS = {"engagement", "views", "likes", "comments", "performance"}
+IMPLICIT_TWO_VIDEO_TERMS = {
+    "both",
+    "both videos",
+    "both of them",
+    "each video",
+    "either video",
+    "one of these",
+    "the two videos",
+    "these two",
+    "which one",
+    "which video",
+}
 FOLLOW_UP_PREFIXES = (
     "what about",
     "how about",
@@ -126,6 +156,11 @@ def _has_any_term(query: str, terms: set[str]) -> bool:
     return any(term in lowered for term in terms)
 
 
+def _is_implicit_two_video_query(query: str) -> bool:
+    lowered = query.lower()
+    return any(term in lowered for term in IMPLICIT_TWO_VIDEO_TERMS)
+
+
 def _last_user_query(history: list[dict] | None) -> str | None:
     for item in reversed(history or []):
         if item.get("role") == "user" and item.get("content"):
@@ -167,10 +202,10 @@ def classify_query(query: str, history: list[dict] | None = None, allow_follow_u
     has_content = _has_any_term(query, CONTENT_TERMS)
     has_comparison = _has_any_term(query, COMPARISON_TERMS)
 
-    if _detect_hook_only(query):
-        return HOOK_COMPARISON
     if _has_any_term(query, IMPROVEMENT_TERMS):
         return IMPROVEMENT_SUGGESTION
+    if _detect_hook_only(query):
+        return HOOK_COMPARISON
     if _is_performance_causal_question(query, video_ids):
         return MIXED_COMPARISON
     if has_metadata and not has_content:
@@ -306,6 +341,8 @@ def _comparison_video_ids(query: str, route: str) -> set[str]:
     if route == IMPROVEMENT_SUGGESTION:
         return detected | {"A", "B"}
     if route in {HOOK_COMPARISON, MIXED_COMPARISON}:
+        return detected or {"A", "B"}
+    if route == TRANSCRIPT_ONLY and _is_implicit_two_video_query(query):
         return detected or {"A", "B"}
     return detected
 

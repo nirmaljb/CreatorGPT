@@ -42,6 +42,27 @@ class RagGraphRoutingTests(unittest.TestCase):
             with self.subTest(question=question):
                 self.assertEqual(classify_query(question), expected_route)
 
+    def test_extended_eval_questions_route_to_expected_paths(self) -> None:
+        cases = {
+            (
+                "Build a compact stats scorecard for both videos: views, likes, comments, "
+                "engagement rate, and follower count."
+            ): METADATA_ONLY,
+            "How many shares did Video A get?": METADATA_ONLY,
+            "Which one feels more watchable, and why?": TRANSCRIPT_ONLY,
+            "Give each video a punchy tagline based only on what is said.": TRANSCRIPT_ONLY,
+            (
+                "First compare the opening hooks, then recommend two changes for Video B using "
+                "A's strongest moment and the performance data."
+            ): IMPROVEMENT_SUGGESTION,
+            "If I only have time to remake one of these, what should I change first?": IMPROVEMENT_SUGGESTION,
+            "Video B clearly won on engagement, right?": METADATA_ONLY,
+        }
+
+        for question, expected_route in cases.items():
+            with self.subTest(question=question):
+                self.assertEqual(classify_query(question), expected_route)
+
     def test_transcript_question_routes_to_transcript_only(self) -> None:
         self.assertEqual(classify_query("What does Video B discuss?"), TRANSCRIPT_ONLY)
         self.assertEqual(classify_query("Compare the topics in Video A and Video B."), TRANSCRIPT_ONLY)
@@ -100,6 +121,22 @@ class RagGraphRoutingTests(unittest.TestCase):
                 {
                     "session_id": "session-1",
                     "query": "Compare the topics in Video A and Video B.",
+                    "route": TRANSCRIPT_ONLY,
+                }
+            )
+
+        self.assertEqual([chunk["video_id"] for chunk in state["chunks"]], ["A", "B"])
+        self.assertEqual([chunk["top_k"] for chunk in state["chunks"]], [4, 4])
+        self.assertEqual(state["retrieval_policy"], COMPARISON_RETRIEVAL)
+        self.assertEqual(mocked_retrieve.call_count, 2)
+
+    def test_vague_two_video_transcript_question_uses_balanced_retrieval(self) -> None:
+        with patch("backend.app.rag.graph.retrieve") as mocked_retrieve:
+            mocked_retrieve.side_effect = lambda **kwargs: [kwargs]
+            state = retrieve_chunks(
+                {
+                    "session_id": "session-1",
+                    "query": "Which one feels more watchable, and why?",
                     "route": TRANSCRIPT_ONLY,
                 }
             )

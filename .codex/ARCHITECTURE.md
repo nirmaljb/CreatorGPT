@@ -135,7 +135,7 @@ Payload indexes are created for `session_id`, `video_id`, and `is_hook`.
 - `comparison_retrieval` retrieves `top_k=4` from Video A and `top_k=4` from Video B, then merges the context.
 - `FOLLOW_UP` resolves obvious references such as "their", "that video", and "what about B" from recent chat history, then re-routes.
 - Answers must cite exact source tags only, such as `[Video A metadata]` or `[Video B, chunk 0, 00:00-00:16]`.
-- Assignment evals assert the expected route and retrieval policy for each required question, not only that an answer streamed.
+- Assignment evals assert the expected route and retrieval policy for each required and extended adversarial question, not only that an answer streamed.
 
 ## Quality Gates
 

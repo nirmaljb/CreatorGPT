@@ -33,7 +33,11 @@ Out of scope for this phase:
 - Why did Video A get more engagement than Video B?
 - Suggest improvements for B based on what worked in A.
 
-The eval uses the existing streaming `/chat` API. It validates that responses stream to a successful done event, answers are non-empty and cited, each assignment question uses the expected route, retrieval policies match route expectations, numeric answers match available Postgres-backed status metadata, unavailable metrics are stated as unavailable, metadata-only questions return metadata sources without transcript chunks, hook answers cite hook chunks only, and mixed/improvement answers cite transcript evidence from both videos.
+It also runs extended questions that cover stats scorecards, missing metrics, vague comparisons, creative synthesis, open-ended recommendations, multi-step hook-plus-metric prompts, and incorrect-premise engagement questions.
+
+The eval uses the existing streaming `/chat` API. It validates that responses stream to a successful done event, answers are non-empty and cited, each eval question uses the expected route, retrieval policies match route expectations, numeric answers match available Postgres-backed status metadata, unavailable metrics are stated as unavailable, metadata-only questions return metadata sources without transcript chunks, hook answers cite hook chunks only, and mixed/improvement answers cite transcript evidence from both videos.
+
+If a chat stream ends with a broken HTTP chunk or an SSE `error` event, the eval records that specific question as failed and continues with the remaining questions. The backend chat generator also wraps retrieval, prompt construction, provider streaming, and chat persistence so runtime failures are sent as SSE `error` events instead of abruptly closing the stream.
 
 Run it with:
 

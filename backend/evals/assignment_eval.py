@@ -1,4 +1,5 @@
 import argparse
+import http.client
 import json
 import os
 import re
@@ -16,11 +17,21 @@ INVALID_CITATION_PATTERNS = [
     re.compile(r"\[POSTGRES METADATA TOOL RESULTS\]", re.IGNORECASE),
 ]
 METADATA_ONLY = "METADATA_ONLY"
+TRANSCRIPT_ONLY = "TRANSCRIPT_ONLY"
 HOOK_COMPARISON = "HOOK_COMPARISON"
 MIXED_COMPARISON = "MIXED_COMPARISON"
 IMPROVEMENT_SUGGESTION = "IMPROVEMENT_SUGGESTION"
 HOOK_RETRIEVAL = "hook_retrieval"
+COMPARISON_RETRIEVAL = "comparison_retrieval"
 METADATA_AUGMENTED_RETRIEVAL = "metadata_augmented_retrieval"
+UNAVAILABLE_TERMS = ("unavailable", "not available", "not provided", "missing", "unknown", "not recorded")
+CHAT_REQUEST_EXCEPTIONS = (
+    urllib.error.URLError,
+    RuntimeError,
+    TimeoutError,
+    http.client.IncompleteRead,
+    json.JSONDecodeError,
+)
 
 ASSIGNMENT_EVALS = [
     {
@@ -78,6 +89,84 @@ ASSIGNMENT_EVALS = [
         "require_chunks": True,
         "required_answer_chunk_videos": {"A", "B"},
     },
+    {
+        "id": "stats_scorecard",
+        "question": (
+            "Build a compact stats scorecard for both videos: views, likes, comments, "
+            "engagement rate, and follower count."
+        ),
+        "expected_route": METADATA_ONLY,
+        "expected_retrieval_policy": None,
+        "required_metadata_videos": {"A", "B"},
+        "forbid_chunks": True,
+        "required_citation_tags": {"[Video A metadata]", "[Video B metadata]"},
+        "required_numeric_fields": {
+            "A": {"views", "likes", "comments", "engagement_rate", "creator_followers"},
+            "B": {"views", "likes", "comments", "engagement_rate", "creator_followers"},
+        },
+    },
+    {
+        "id": "missing_shares_wrong_metric",
+        "question": "How many shares did Video A get?",
+        "expected_route": METADATA_ONLY,
+        "expected_retrieval_policy": None,
+        "required_metadata_videos": {"A"},
+        "forbid_chunks": True,
+        "required_citation_tags": {"[Video A metadata]"},
+        "required_unavailable_terms": {"share"},
+    },
+    {
+        "id": "vague_watchability",
+        "question": "Which one feels more watchable, and why?",
+        "expected_route": TRANSCRIPT_ONLY,
+        "expected_retrieval_policy": COMPARISON_RETRIEVAL,
+        "required_chunk_videos": {"A", "B"},
+        "require_chunks": True,
+        "required_answer_chunk_videos": {"A", "B"},
+    },
+    {
+        "id": "creative_taglines",
+        "question": "Give each video a punchy tagline based only on what is said.",
+        "expected_route": TRANSCRIPT_ONLY,
+        "expected_retrieval_policy": COMPARISON_RETRIEVAL,
+        "required_chunk_videos": {"A", "B"},
+        "require_chunks": True,
+        "required_answer_chunk_videos": {"A", "B"},
+    },
+    {
+        "id": "multi_level_hook_metrics_improve",
+        "question": (
+            "First compare the opening hooks, then recommend two changes for Video B using "
+            "A's strongest moment and the performance data."
+        ),
+        "expected_route": IMPROVEMENT_SUGGESTION,
+        "expected_retrieval_policy": METADATA_AUGMENTED_RETRIEVAL,
+        "required_metadata_videos": {"A", "B"},
+        "required_chunk_videos": {"A", "B"},
+        "require_chunks": True,
+        "required_answer_chunk_videos": {"A", "B"},
+        "required_citation_tags": {"[Video A metadata]", "[Video B metadata]"},
+    },
+    {
+        "id": "open_ended_next_post",
+        "question": "If I only have time to remake one of these, what should I change first?",
+        "expected_route": IMPROVEMENT_SUGGESTION,
+        "expected_retrieval_policy": METADATA_AUGMENTED_RETRIEVAL,
+        "required_metadata_videos": {"A", "B"},
+        "required_chunk_videos": {"A", "B"},
+        "require_chunks": True,
+        "required_answer_chunk_videos": {"A", "B"},
+    },
+    {
+        "id": "incorrect_engagement_winner",
+        "question": "Video B clearly won on engagement, right?",
+        "expected_route": METADATA_ONLY,
+        "expected_retrieval_policy": None,
+        "required_metadata_videos": {"A", "B"},
+        "forbid_chunks": True,
+        "required_citation_tags": {"[Video A metadata]", "[Video B metadata]"},
+        "required_engagement_videos": {"A", "B"},
+    },
 ]
 
 
@@ -92,6 +181,17 @@ class EvalResult:
     streamed_successfully: bool
     route: str | None = None
     retrieval_policy: str | None = None
+    transport_error: str | None = None
+
+
+@dataclass
+class ChatEvalResponse:
+    answer: str
+    sources: list[dict[str, Any]]
+    events: list[dict[str, Any]]
+    route: str | None
+    retrieval_policy: str | None
+    transport_error: str | None = None
 
 
 def _request_json(url: str) -> dict[str, Any]:
@@ -100,9 +200,16 @@ def _request_json(url: str) -> dict[str, Any]:
         return json.loads(response.read().decode("utf-8"))
 
 
-def _post_chat(
-    api_base: str, session_id: str, question: str
-) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]], str | None, str | None]:
+def _read_response_body(response: Any) -> tuple[str, str | None]:
+    try:
+        return response.read().decode("utf-8"), None
+    except http.client.IncompleteRead as exc:
+        partial = exc.partial or b""
+        raw = partial.decode("utf-8", errors="replace")
+        return raw, f"chat stream ended before a complete HTTP chunk was received: {exc}"
+
+
+def _post_chat(api_base: str, session_id: str, question: str) -> ChatEvalResponse:
     body = json.dumps({"session_id": session_id, "message": question}).encode("utf-8")
     request = urllib.request.Request(
         f"{api_base.rstrip('/')}/chat",
@@ -111,12 +218,13 @@ def _post_chat(
         method="POST",
     )
     with urllib.request.urlopen(request, timeout=90) as response:
-        raw = response.read().decode("utf-8")
+        raw, transport_error = _read_response_body(response)
 
     answer = ""
     sources: list[dict[str, Any]] = []
-    events = parse_sse(raw)
+    events = parse_sse(raw, skip_invalid=transport_error is not None)
     route, retrieval_policy = _route_trace_from_events(events)
+    stream_error = None
     for event in events:
         event_name = event.get("event")
         payload = event.get("data") or {}
@@ -125,11 +233,21 @@ def _post_chat(
         elif event_name == "token":
             answer += payload.get("token", "")
         elif event_name == "error":
-            raise RuntimeError(payload.get("message", "Chat stream returned an error event"))
-    return answer, sources, events, route, retrieval_policy
+            stream_error = payload.get("message", "Chat stream returned an error event")
+    if stream_error:
+        error_message = f"chat stream returned an error event: {stream_error}"
+        transport_error = f"{transport_error}; {error_message}" if transport_error else error_message
+    return ChatEvalResponse(
+        answer=answer,
+        sources=sources,
+        events=events,
+        route=route,
+        retrieval_policy=retrieval_policy,
+        transport_error=transport_error,
+    )
 
 
-def parse_sse(raw: str) -> list[dict[str, Any]]:
+def parse_sse(raw: str, *, skip_invalid: bool = False) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     for block in raw.split("\n\n"):
         if not block.strip():
@@ -143,7 +261,12 @@ def parse_sse(raw: str) -> list[dict[str, Any]]:
                 data_lines.append(line.removeprefix("data:").strip())
         payload: dict[str, Any] = {}
         if data_lines:
-            payload = json.loads("\n".join(data_lines))
+            try:
+                payload = json.loads("\n".join(data_lines))
+            except json.JSONDecodeError:
+                if skip_invalid:
+                    continue
+                raise
         events.append({"event": event_name, "data": payload})
     return events
 
@@ -212,6 +335,11 @@ def _metric_available(video: dict[str, Any], available_key: str, value_key: str)
     if available_key in video:
         return bool(video.get(available_key))
     return not _missing_count(video.get(value_key))
+
+
+def _unavailable_stated(answer: str) -> bool:
+    lowered = answer.lower()
+    return any(term in lowered for term in UNAVAILABLE_TERMS)
 
 
 def _streamed_successfully(events: list[dict[str, Any]] | None) -> bool:
@@ -327,6 +455,26 @@ def validate_eval_case(
     if not answer.strip():
         failures.append("answer was empty")
 
+    for video_id, fields in case.get("required_numeric_fields", {}).items():
+        video = status_metadata.get(video_id)
+        if not video:
+            failures.append(f"missing Postgres metadata for Video {video_id}")
+            continue
+        for field_name in fields:
+            available_key = f"{field_name}_available"
+            expected_value = video.get(field_name)
+            if not _metric_available(video, available_key, field_name):
+                if not _unavailable_stated(answer):
+                    failures.append(f"{field_name} for Video {video_id} is unavailable but answer did not say so")
+            elif not _answer_contains_number(answer, expected_value):
+                failures.append(f"{field_name} for Video {video_id} does not match Postgres value {expected_value}")
+
+    for term in case.get("required_unavailable_terms", set()):
+        if term.lower() not in answer.lower():
+            failures.append(f"answer did not mention unavailable field {term}")
+        if not _unavailable_stated(answer):
+            failures.append(f"{term} is unavailable but answer did not say so")
+
     for video_id in case.get("required_engagement_videos", set()):
         video = status_metadata.get(video_id)
         if not video:
@@ -393,18 +541,43 @@ def run_assignment_evals(api_base: str, session_id: str) -> list[EvalResult]:
 
     results = []
     for case in ASSIGNMENT_EVALS:
-        answer, sources, events, route, retrieval_policy = _post_chat(api_base, session_id, case["question"])
+        try:
+            chat_response = _post_chat(api_base, session_id, case["question"])
+        except CHAT_REQUEST_EXCEPTIONS as exc:
+            results.append(
+                EvalResult(
+                    id=case["id"],
+                    question=case["question"],
+                    ok=False,
+                    failures=[f"chat request failed: {exc}"],
+                    answer="",
+                    sources=[],
+                    streamed_successfully=False,
+                    transport_error=str(exc),
+                )
+            )
+            continue
+        answer = chat_response.answer
+        sources = chat_response.sources
+        events = chat_response.events
+        route = chat_response.route
+        retrieval_policy = chat_response.retrieval_policy
         streamed_successfully = _streamed_successfully(events)
-        failures = validate_eval_case(
-            case,
-            answer,
-            sources,
-            status_metadata=status_metadata,
-            events=events,
-            route=route,
-            retrieval_policy=retrieval_policy,
-            enforce_route=True,
-        )
+        if chat_response.transport_error:
+            failures = [chat_response.transport_error]
+            if not streamed_successfully:
+                failures.append("response did not stream to a successful done event")
+        else:
+            failures = validate_eval_case(
+                case,
+                answer,
+                sources,
+                status_metadata=status_metadata,
+                events=events,
+                route=route,
+                retrieval_policy=retrieval_policy,
+                enforce_route=True,
+            )
         results.append(
             EvalResult(
                 id=case["id"],
@@ -416,6 +589,7 @@ def run_assignment_evals(api_base: str, session_id: str) -> list[EvalResult]:
                 streamed_successfully=streamed_successfully,
                 route=route,
                 retrieval_policy=retrieval_policy,
+                transport_error=chat_response.transport_error,
             )
         )
     return results
@@ -453,7 +627,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         results = run_assignment_evals(api_base=args.api_base, session_id=args.session_id)
-    except (urllib.error.URLError, RuntimeError, TimeoutError) as exc:
+    except CHAT_REQUEST_EXCEPTIONS as exc:
         print(f"Eval run failed: {exc}", file=sys.stderr)
         return 2
 

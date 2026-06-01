@@ -99,8 +99,12 @@ Phase 2 implementation.
 - Changed comparison, hook, mixed, and improvement retrieval to avoid one global vector search and instead retrieve balanced Video A and Video B context.
 - Exposed `route` and `retrieval_policy` in `/chat` SSE `sources` and `done` events for route-aware eval validation.
 - Tightened assignment eval cases to assert expected routes, expected retrieval policies, hook-only answer citations, exact metadata citations, and A/B transcript chunk citations for mixed and improvement answers.
+- Added extended eval questions for stats scorecards, missing unsupported metrics, vague comparisons, creative tagline synthesis, multi-level hook-plus-metric recommendations, open-ended next-post advice, and incorrect-premise engagement claims.
+- Updated routing so share/save/stat questions stay metadata-only, recommendation/change/remake phrasing routes to improvement, and implicit two-video transcript questions use balanced A/B comparison retrieval.
 - Changed backend startup so Qdrant collection validation is non-fatal by default; the API boots in degraded mode with `/health` showing `qdrant: false`, while ingest/chat still fail visibly if Qdrant is required and unreachable.
 - Added `REQUIRE_QDRANT_ON_STARTUP` for fail-fast deployments and `QDRANT_CHECK_COMPATIBILITY=false` to suppress Qdrant server-version probe warnings by default.
+- Changed `/chat` streaming so retrieval, prompt construction, provider streaming, and chat persistence failures are logged and emitted as SSE `error` events instead of abruptly closing the chunked response.
+- Hardened `scripts/eval_assignment_questions.py` so broken chunked chat streams, SSE error events, and per-question chat request failures are recorded as failed eval cases while the rest of the suite continues.
 
 ## Current Next Step
 
@@ -197,3 +201,10 @@ Run `python scripts/eval_assignment_questions.py --session-id <id>` against a co
 - `make backend-lint` and `make backend-tests` passed after making Qdrant startup validation non-fatal by default; backend tests now report 54 selected tests plus 1 deselected smoke test.
 - `backend/.venv/bin/uvicorn backend.app.main:app --host 127.0.0.1 --port 8003` started successfully after the Qdrant startup change and no longer emitted the Qdrant compatibility warning; the temporary process was stopped after verification.
 - `make ci` passed after making Qdrant startup validation non-fatal by default.
+- `backend/.venv/bin/python -m pytest backend/tests/test_assignment_eval.py backend/tests/test_rag_graph.py` passed after adding extended eval questions and routing heuristics.
+- `make backend-lint` and `make backend-tests` passed after adding extended eval questions; backend tests now report 60 selected tests plus 1 deselected smoke test.
+- `make ci` passed after adding extended eval questions.
+- `backend/.venv/bin/python -m pytest backend/tests/test_assignment_eval.py backend/tests/test_rag_service.py` passed after hardening chat-stream and eval-stream error handling.
+- `make backend-lint` passed after hardening chat-stream and eval-stream error handling.
+- `make backend-tests` passed after hardening chat-stream and eval-stream error handling; backend tests now report 65 selected tests plus 1 deselected smoke test.
+- `make ci` and `git diff --check` passed after hardening chat-stream and eval-stream error handling.

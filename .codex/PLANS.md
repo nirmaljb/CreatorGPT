@@ -65,7 +65,7 @@
 - Recommendation answers cite transcript evidence and metrics.
 - Improvement answers retrieve Video A evidence for what worked and Video B evidence for improvement opportunities.
 - Comparison and metadata-augmented routes retrieve `top_k=4` from Video A and `top_k=4` from Video B instead of one global `top_k=8` search.
-- Route-aware evals verify expected route, expected retrieval policy, citation shape, numeric values, and unavailable metric behavior.
+- Route-aware evals verify expected route, expected retrieval policy, citation shape, numeric values, unavailable metric behavior, vague/open-ended questions, creative synthesis, multi-step prompts, and incorrect-premise questions.
 - Follow-up questions resolve obvious video references without using a full query-rewrite pipeline.
 - Eval script passes the assignment's core questions.
 

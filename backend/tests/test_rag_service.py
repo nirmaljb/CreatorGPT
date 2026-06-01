@@ -34,6 +34,16 @@ class RagServiceTests(unittest.TestCase):
         self.assertEqual(done_payload["route"], "HOOK_COMPARISON")
         self.assertEqual(done_payload["retrieval_policy"], "hook_retrieval")
 
+    def test_stream_yields_error_event_when_retrieval_fails_before_sources(self) -> None:
+        with patch("backend.app.rag.service.run_retrieval_graph", side_effect=RuntimeError("qdrant down")):
+            raw_events = list(stream_rag_response("session-1", "Compare hooks"))
+
+        self.assertEqual(len(raw_events), 1)
+        error_payload = json.loads(raw_events[0].split("data: ", 1)[1])
+        self.assertTrue(raw_events[0].startswith("event: error"))
+        self.assertEqual(error_payload["message"], "qdrant down")
+        self.assertIsNone(error_payload["route"])
+
 
 if __name__ == "__main__":
     unittest.main()

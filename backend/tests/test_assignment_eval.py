@@ -1,12 +1,19 @@
+import http.client
 import unittest
+from unittest.mock import patch
 
 from backend.evals.assignment_eval import (
     ASSIGNMENT_EVALS,
+    COMPARISON_RETRIEVAL,
     HOOK_RETRIEVAL,
     METADATA_AUGMENTED_RETRIEVAL,
     METADATA_ONLY,
     MIXED_COMPARISON,
+    TRANSCRIPT_ONLY,
+    ChatEvalResponse,
+    _read_response_body,
     parse_sse,
+    run_assignment_evals,
     validate_eval_case,
 )
 
@@ -23,6 +30,62 @@ class AssignmentEvalTests(unittest.TestCase):
 
         self.assertEqual([event["event"] for event in events], ["sources", "token", "done"])
         self.assertEqual(events[0]["data"]["sources"][0]["video_id"], "A")
+
+    def test_parse_sse_can_skip_invalid_partial_event(self) -> None:
+        raw = 'event: token\ndata: {"token": "ok"}\n\nevent: token\ndata: {"token":'
+
+        events = parse_sse(raw, skip_invalid=True)
+
+        self.assertEqual(events, [{"event": "token", "data": {"token": "ok"}}])
+
+    def test_incomplete_chunk_read_returns_partial_body_and_error(self) -> None:
+        class BrokenResponse:
+            def read(self) -> bytes:
+                raise http.client.IncompleteRead(b'event: token\ndata: {"token": "partial"}\n\n')
+
+        raw, error = _read_response_body(BrokenResponse())
+
+        self.assertEqual(raw, 'event: token\ndata: {"token": "partial"}\n\n')
+        self.assertIn("chat stream ended before a complete HTTP chunk was received", error or "")
+
+    def test_run_assignment_evals_converts_chat_transport_errors_to_failures(self) -> None:
+        status = {"status": "completed", "metadata": []}
+
+        with (
+            patch("backend.evals.assignment_eval._request_json", return_value=status),
+            patch("backend.evals.assignment_eval._post_chat", side_effect=http.client.IncompleteRead(b"")),
+        ):
+            results = run_assignment_evals("http://example.test", "session-1")
+
+        self.assertEqual(len(results), len(ASSIGNMENT_EVALS))
+        self.assertFalse(results[0].ok)
+        self.assertFalse(results[0].streamed_successfully)
+        self.assertIn("chat request failed", results[0].failures[0])
+
+    def test_run_assignment_evals_keeps_stream_error_failures_focused(self) -> None:
+        status = {"status": "completed", "metadata": []}
+        chat_response = ChatEvalResponse(
+            answer="",
+            sources=[],
+            events=[],
+            route=None,
+            retrieval_policy=None,
+            transport_error="chat stream returned an error event: qdrant down",
+        )
+
+        with (
+            patch("backend.evals.assignment_eval._request_json", return_value=status),
+            patch("backend.evals.assignment_eval._post_chat", return_value=chat_response),
+        ):
+            results = run_assignment_evals("http://example.test", "session-1")
+
+        self.assertEqual(
+            results[0].failures,
+            [
+                "chat stream returned an error event: qdrant down",
+                "response did not stream to a successful done event",
+            ],
+        )
 
     def test_metadata_only_eval_rejects_chunk_sources(self) -> None:
         case = ASSIGNMENT_EVALS[0]
@@ -56,6 +119,19 @@ class AssignmentEvalTests(unittest.TestCase):
         )
 
         self.assertIn("engagement rate for Video B does not match Postgres value 0.75", failures)
+
+    def test_extended_eval_cases_cover_requested_question_types(self) -> None:
+        expected_ids = {
+            "stats_scorecard",
+            "missing_shares_wrong_metric",
+            "vague_watchability",
+            "creative_taglines",
+            "multi_level_hook_metrics_improve",
+            "open_ended_next_post",
+            "incorrect_engagement_winner",
+        }
+
+        self.assertTrue(expected_ids.issubset({case["id"] for case in ASSIGNMENT_EVALS}))
 
     def test_eval_rejects_wrong_route_when_route_enforced(self) -> None:
         case = ASSIGNMENT_EVALS[0]
@@ -183,6 +259,100 @@ class AssignmentEvalTests(unittest.TestCase):
 
         self.assertIn("follower count for Video B is missing but answer did not say unavailable", failures)
         self.assertIn("follower count for Video B is missing but answer appears to invent a number", failures)
+
+    def test_stats_scorecard_checks_multiple_postgres_values(self) -> None:
+        case = next(item for item in ASSIGNMENT_EVALS if item["id"] == "stats_scorecard")
+        sources = [
+            {"type": "metadata", "video_id": "A", "source_tag": "[Video A metadata]"},
+            {"type": "metadata", "video_id": "B", "source_tag": "[Video B metadata]"},
+        ]
+        metadata = {
+            "A": {
+                "views": 1000,
+                "views_available": True,
+                "likes": 120,
+                "likes_available": True,
+                "comments": 12,
+                "comments_available": True,
+                "engagement_rate": 13.2,
+                "engagement_rate_available": True,
+                "creator_followers": 900,
+                "creator_followers_available": True,
+            },
+            "B": {
+                "views": 2000,
+                "views_available": True,
+                "likes": 80,
+                "likes_available": True,
+                "comments": 8,
+                "comments_available": True,
+                "engagement_rate": 4.4,
+                "engagement_rate_available": True,
+                "creator_followers": 0,
+                "creator_followers_available": False,
+            },
+        }
+
+        failures = validate_eval_case(
+            case,
+            (
+                "A: 1000 views, 120 likes, 12 comments, 13.2%, 900 followers [Video A metadata]. "
+                "B: 2000 views, 80 likes, 99 comments, 4.4%, followers unavailable [Video B metadata]."
+            ),
+            sources,
+            status_metadata=metadata,
+            events=[{"event": "done", "data": {"ok": True}}],
+            route=METADATA_ONLY,
+            retrieval_policy=None,
+            enforce_route=True,
+        )
+
+        self.assertIn("comments for Video B does not match Postgres value 8", failures)
+
+    def test_missing_share_eval_requires_unavailable_language(self) -> None:
+        case = next(item for item in ASSIGNMENT_EVALS if item["id"] == "missing_shares_wrong_metric")
+        sources = [{"type": "metadata", "video_id": "A", "source_tag": "[Video A metadata]"}]
+
+        failures = validate_eval_case(
+            case,
+            "Video A had 100 shares [Video A metadata].",
+            sources,
+            events=[{"event": "done", "data": {"ok": True}}],
+            route=METADATA_ONLY,
+            retrieval_policy=None,
+            enforce_route=True,
+        )
+
+        self.assertIn("share is unavailable but answer did not say so", failures)
+
+    def test_vague_eval_requires_transcript_route_and_balanced_policy(self) -> None:
+        case = next(item for item in ASSIGNMENT_EVALS if item["id"] == "vague_watchability")
+        sources = [
+            {
+                "type": "chunk",
+                "video_id": "A",
+                "start_time": 30.0,
+                "source_tag": "[Video A, chunk 2, 00:30-00:44]",
+            },
+            {
+                "type": "chunk",
+                "video_id": "B",
+                "start_time": 10.0,
+                "source_tag": "[Video B, chunk 1, 00:10-00:20]",
+            },
+        ]
+
+        failures = validate_eval_case(
+            case,
+            "A feels more watchable [Video A, chunk 2, 00:30-00:44]. B is less direct [Video B, chunk 1, 00:10-00:20].",
+            sources,
+            events=[{"event": "done", "data": {"ok": True}}],
+            route=TRANSCRIPT_ONLY,
+            retrieval_policy=COMPARISON_RETRIEVAL,
+            enforce_route=True,
+        )
+
+        self.assertEqual(failures, [])
 
     def test_requires_successful_done_event_when_events_are_provided(self) -> None:
         case = ASSIGNMENT_EVALS[1]

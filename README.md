@@ -200,14 +200,16 @@ backend/.venv/bin/python scripts/eval_assignment_questions.py \
   --session-id <completed-session-id>
 ```
 
-The eval asks the assignment questions and checks that:
+The eval asks the assignment questions plus harder stats, vague, creative, open-ended, multi-step, and incorrect-premise questions. It checks that:
 
 - the response streamed successfully
 - the answer is not empty
 - the answer has citations
+- the selected route and retrieval policy match the question type
 - numeric answers match Postgres metadata
-- missing follower counts are stated as unavailable
+- missing counts or unsupported metrics are stated as unavailable
 - hook answers cite only early chunks
+- mixed and recommendation answers cite transcript evidence from both videos
 
 ## Useful Commands
 
