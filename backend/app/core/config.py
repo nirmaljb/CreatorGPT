@@ -34,10 +34,11 @@ class Settings(BaseSettings):
     force_refresh: bool = Field(default=False, alias="FORCE_REFRESH")
 
     cors_origins: str = Field(default="http://localhost:3000", alias="CORS_ORIGINS")
+    cors_origin_regex: str = Field(default="", alias="CORS_ORIGIN_REGEX")
 
     @property
     def cors_origin_list(self) -> list[str]:
-        origins = {origin.strip() for origin in self.cors_origins.split(",") if origin.strip()}
+        origins = {origin.strip().rstrip("/") for origin in self.cors_origins.split(",") if origin.strip()}
         origins.update(
             {
                 "http://localhost:3000",

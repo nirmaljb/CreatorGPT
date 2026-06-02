@@ -1,0 +1,58 @@
+services:
+  - type: web
+    name: creator-rag-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: TMP_DIR
+        value: /tmp/creator-rag
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_CHAT_MODEL
+        value: llama-3.3-70b-versatile
+      - key: GROQ_TRANSCRIPTION_MODEL
+        value: whisper-large-v3
+      - key: DATABASE_URL
+        sync: false
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: QDRANT_COLLECTION
+        value: creator_video_chunks
+      - key: REQUIRE_QDRANT_ON_STARTUP
+        value: "false"
+      - key: QDRANT_CHECK_COMPATIBILITY
+        value: "false"
+      - key: EMBEDDING_PROVIDER
+        value: fastembed
+      - key: EMBEDDING_MODEL
+        value: BAAI/bge-small-en-v1.5
+      - key: EMBEDDING_DIMENSIONS
+        value: 384
+      - key: MAX_VIDEO_SECONDS
+        value: 600
+      - key: MAX_CONCURRENT_INGESTIONS
+        value: 2
+      - key: MAX_CHUNKS_PER_VIDEO
+        value: 120
+      - key: MAX_CHAT_HISTORY_MESSAGES
+        value: 12
+      - key: MAX_RETRIEVED_CHUNKS
+        value: 8
+      - key: MAX_SESSIONS_PER_IP_PER_HOUR
+        value: 20
+      - key: INGEST_STALE_SECONDS
+        value: 900
+      - key: FORCE_REFRESH
+        value: "false"
+      - key: CORS_ORIGINS
+        sync: false
+      - key: CORS_ORIGIN_REGEX
+        sync: false

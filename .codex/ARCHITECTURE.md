@@ -173,6 +173,10 @@ No auth in Phase 1. This is a single-user assignment demo. Production would add 
 
 ## Deployment Notes
 
+- Backend Docker deployment is supported with `backend/Dockerfile`. Render should build with Dockerfile path `./backend/Dockerfile`, Docker context `.`, and the default Dockerfile command.
+- The backend container installs `ffmpeg`, writes runtime media to `/tmp/creator-rag`, and binds Uvicorn to `0.0.0.0:${PORT:-10000}`.
+- `render.yaml` defines a Render Docker web service and leaves secrets/provider URLs as manual environment variables.
+- Hosted frontend/backend pairing uses `NEXT_PUBLIC_API_BASE` on the frontend and `CORS_ORIGINS` on the backend. `CORS_ORIGIN_REGEX` is available for trusted preview domains.
 - Backend needs `GROQ_API_KEY`, `DATABASE_URL`, `QDRANT_URL`, and `QDRANT_API_KEY` for full ingest/chat behavior.
 - Qdrant startup validation is non-fatal by default. If Qdrant is unreachable, the API process still starts and `/health` returns `qdrant: false`; ingestion and transcript retrieval still require Qdrant and fail visibly.
 - Set `REQUIRE_QDRANT_ON_STARTUP=true` when deployment should fail fast if Qdrant cannot be validated.

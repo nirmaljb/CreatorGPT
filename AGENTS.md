@@ -128,6 +128,8 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Assignment evals are run through `scripts/eval_assignment_questions.py`; reusable logic lives in `backend.evals.assignment_eval` for later mocked CI coverage.
 - Required CI runs backend Ruff lint, backend Pytest tests, frontend ESLint, frontend TypeScript typecheck, frontend build, markdown lint, and a provider-mocked smoke test.
 - The frontend uses `fetch` with a POST body and manually parses SSE because native `EventSource` does not support POST request bodies.
+- Hosted frontend/backend deployments are connected by setting `NEXT_PUBLIC_API_BASE` on the frontend and `CORS_ORIGINS` on the backend. Exact origins are preferred; `CORS_ORIGIN_REGEX` exists only for trusted preview domains.
+- Backend Docker deployment for Render uses `backend/Dockerfile` with Docker context `.`, installs `ffmpeg`, writes media to `/tmp/creator-rag`, and starts Uvicorn on `0.0.0.0:${PORT:-10000}`.
 - Frontend config pins `outputFileTracingRoot` to the frontend directory because this machine has another lockfile above the repo and Next.js otherwise infers the wrong root.
 - Downloaded audio files are temporary and are deleted after ingestion finishes or fails.
 - Phase 1 input is now two generic video slots. Each slot can be marked as YouTube or Instagram in the UI, while defaulting to Video A = YouTube and Video B = Instagram for the assignment demo.

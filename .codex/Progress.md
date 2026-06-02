@@ -117,6 +117,11 @@ Phase 2 implementation.
 - Capped chat history loading and prompt history with `MAX_CHAT_HISTORY_MESSAGES`.
 - Capped Qdrant retrieval with `MAX_RETRIEVED_CHUNKS` while preserving separate A/B retrieval for comparison routes.
 - Updated the frontend to fetch runtime limits, show them as compact chips, use the retrieved-chunk cap for source display, and render backend `429` details cleanly.
+- Added a Render-ready backend Dockerfile that installs `ffmpeg`, copies the backend package with repo-root Docker context, writes runtime media to `/tmp/creator-rag`, and starts Uvicorn on the Render `PORT`.
+- Added `.dockerignore` and `render.yaml` so the backend can be deployed as a Render Docker web service with provider secrets supplied through Render environment variables.
+- Added `CORS_ORIGIN_REGEX` alongside exact `CORS_ORIGINS` and documented the hosted frontend/backend pairing with frontend `NEXT_PUBLIC_API_BASE`.
+- Normalized configured backend CORS origins by trimming trailing slashes so pasted hosted frontend URLs do not fail browser preflight checks.
+- Updated the frontend API base handling to trim trailing slashes from hosted backend URLs before calling `/config`, `/ingest`, `/status`, `/messages`, and `/chat`.
 
 ## Current Next Step
 
@@ -230,3 +235,7 @@ Run `python scripts/eval_assignment_questions.py --session-id <id>` against a co
 - `make backend-lint`, `make backend-tests`, `make frontend-lint`, `make frontend-typecheck`, `make frontend-build`, `make markdown-lint`, and `git diff --check` passed after adding backpressure limits.
 - `backend/.venv/bin/python -m pytest backend/tests/test_rag_graph.py` passed after tightening the lowered retrieval-limit path.
 - `make ci` passed after the final backpressure changes; backend tests now report 76 selected tests plus 1 deselected smoke test, and the mocked smoke test passes separately.
+- `backend/.venv/bin/python -m pytest backend/tests/test_startup.py`, `cd frontend && npm run typecheck`, `make backend-lint`, `make frontend-lint`, `make markdown-lint`, and `git diff --check` passed after adding Render Docker/CORS config.
+- `docker build -f backend/Dockerfile -t creator-rag-backend:render-smoke .` passed after the final Dockerfile changes, including `ffmpeg`, Python dependencies, FastEmbed/Qdrant wheels, and the backend package copy.
+- `make ci` passed after the Render Docker/CORS updates; backend tests now report 78 selected tests plus 1 deselected smoke test, and the mocked smoke test passes separately.
+- `backend/.venv/bin/python -m pytest backend/tests/test_startup.py`, `make backend-lint`, `git diff --check`, and `make ci` passed after adding trailing-slash normalization for backend CORS origins.

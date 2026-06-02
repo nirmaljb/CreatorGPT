@@ -70,7 +70,11 @@ type RuntimeLimits = {
   max_sessions_per_ip_per_hour: number;
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+function normalizeApiBase(value: string | undefined) {
+  return (value || "http://localhost:8000").replace(/\/+$/, "");
+}
+
+const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_BASE);
 const STATUS_REQUEST_TIMEOUT_MS = 7000;
 const NETWORK_MESSAGE =
   "Connection is unavailable or slow. Status polling will keep retrying when the browser is online.";

@@ -56,6 +56,7 @@ Add a short GIF or video here that shows:
 | Frontend checks | ESLint, TypeScript, Next build | Checks frontend code and production build |
 | Markdown checks | markdownlint | Keeps documentation readable and consistent |
 | CI | GitHub Actions | Runs lint, tests, build, markdown lint, and mocked smoke test |
+| Deployment | Docker, Render | Builds the backend with system media tools and deploys it as a web service |
 
 ## High-Level Pipeline
 
@@ -129,6 +130,15 @@ Optional values are already shown in [.env.example](.env.example).
 By default, the backend can start when Qdrant is temporarily unreachable and `/health` will show `qdrant: false`.
 Set `REQUIRE_QDRANT_ON_STARTUP=true` if you want startup to fail when Qdrant validation fails.
 
+For a hosted frontend, set these together to avoid CORS errors:
+
+| Variable | Where To Set It | Example |
+| --- | --- | --- |
+| `CORS_ORIGINS` | Backend | `https://your-frontend.onrender.com,https://your-custom-domain.com` |
+| `NEXT_PUBLIC_API_BASE` | Frontend | `https://your-backend.onrender.com` |
+
+`CORS_ORIGIN_REGEX` is optional. Use it only for trusted preview domains.
+
 Useful backpressure limits:
 
 | Variable | Default | What It Controls |
@@ -181,6 +191,33 @@ npm run dev
 Open `http://localhost:3000`.
 
 If port `3000` is already busy, Next.js may choose another port such as `3001`.
+
+## Render Backend Deployment
+
+The backend can deploy as a Docker web service on Render.
+
+Render setup:
+
+1. Create a new Render Web Service.
+2. Choose Docker as the runtime.
+3. Use Dockerfile path `./backend/Dockerfile`.
+4. Use Docker context `.`.
+5. Keep the Docker command empty so Render uses the Dockerfile `CMD`.
+6. Set the backend environment variables from [.env.example](.env.example).
+7. Set `CORS_ORIGINS` to the deployed frontend origin.
+
+The Docker image installs `ffmpeg`, copies only the backend app, and starts Uvicorn on `0.0.0.0` using `${PORT:-10000}`. This matches Render's port-binding guidance for web services.
+
+You can also apply [render.yaml](render.yaml) as a Render Blueprint. It defines the backend Docker service and marks secret/provider values as manual Render environment variables.
+
+Local Docker smoke build:
+
+```bash
+docker build -f backend/Dockerfile -t creator-rag-backend .
+docker run --rm -p 10000:10000 --env-file .env creator-rag-backend
+```
+
+Then open `http://localhost:10000/health`.
 
 ## Local Checks
 

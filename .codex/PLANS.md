@@ -97,6 +97,7 @@
 - Add root `Makefile` targets for backend lint/tests, frontend lint/typecheck/build, markdown lint, and mocked smoke tests.
 - Add pre-commit, Ruff, Pytest, markdown lint, PR template, and GitHub Actions CI.
 - Keep required CI provider-mocked only; real Groq, Qdrant Cloud, Neon, YouTube, and Instagram checks stay manual or nightly.
+- Add backend Docker deployment support for Render with documented CORS/frontend env pairing.
 - Finalize README, architecture notes, cost/scaling notes, and Loom script.
 - Run clean-clone demo rehearsal before recording.
 
@@ -105,5 +106,7 @@
 - Clean clone can install, configure env, and run.
 - Mocked tests pass without paid providers.
 - CI runs backend lint, backend tests, frontend lint, frontend typecheck, frontend build, markdown lint, and mocked smoke tests.
+- Backend can be built from `backend/Dockerfile` for Render and binds to the Render `PORT` value.
+- Hosted frontend/backend deployments can be connected with `NEXT_PUBLIC_API_BASE` and `CORS_ORIGINS` without CORS errors.
 - Loom script explains cost, scaling, quality tradeoffs, and fallback paths.
 - Final demo has no known blocking bugs.
