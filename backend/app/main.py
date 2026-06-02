@@ -91,6 +91,14 @@ def status(session_id: str) -> dict:
         row = get_session(session_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Session not found")
+    logger.info(
+        "Status response session_id=%s status=%s step=%s progress=%s metadata_count=%s",
+        session_id,
+        row["status"],
+        row.get("current_step"),
+        row.get("progress_percent"),
+        len(row.get("metadata") or []),
+    )
     return row
 
 

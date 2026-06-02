@@ -25,13 +25,15 @@
 10. Completed sessions move to `completed`; failed videos include per-video error details in status responses.
 11. Stale `processing` sessions are marked `failed` from the status path after `INGEST_STALE_SECONDS`.
 12. The frontend does not restore a saved session on refresh; every page load starts with a clean UI state.
-13. `POST /chat` loads chat history and classifies the question with a rules-first LangGraph router.
-14. Follow-up questions resolve simple video references from chat history before being re-routed.
-15. Metadata questions use typed Postgres metadata tools only and do not query Qdrant.
-16. Semantic transcript questions retrieve transcript chunks from Qdrant.
-17. Hook comparison questions retrieve Qdrant chunks with `is_hook=true`.
-18. Mixed comparison and improvement questions use typed Postgres metadata tools plus Qdrant transcript retrieval.
-19. The backend streams a Groq answer with metadata and/or transcript citations. Compare questions that mention both videos retrieve chunks from each video.
+13. The frontend status poller aborts slow `/status` requests and keeps retrying while the browser is online.
+14. `POST /chat` loads chat history and classifies the question with a rules-first LangGraph router.
+15. Follow-up questions resolve simple video references from chat history before being re-routed.
+16. Metadata questions use typed Postgres metadata tools only and do not query Qdrant.
+17. Semantic transcript questions retrieve transcript chunks from Qdrant.
+18. Hook comparison questions retrieve Qdrant chunks with `is_hook=true`.
+19. Mixed comparison and improvement questions use typed Postgres metadata tools plus Qdrant transcript retrieval.
+20. The backend streams a Groq answer with metadata and/or transcript citations. Compare questions that mention both videos retrieve chunks from each video.
+21. Ingestion and completed chat turns update an internal per-session usage ledger in Postgres.
 
 ## Database Schema
 
@@ -92,6 +94,24 @@ Status responses derive metric availability flags from `raw_metadata` so missing
 - `sources`
 - `created_at`
 
+### `session_usage_ledger`
+
+- `session_id`
+- `video_count`
+- `transcribed_seconds`
+- `transcript_source`
+- `chunk_count`
+- `embedding_count`
+- `chat_prompt_tokens`
+- `chat_completion_tokens`
+- `llm_model`
+- `embedding_model`
+- `cache_hit`
+- `cache_miss`
+- `created_at`
+
+The ledger is internal. It stores actual Whisper seconds only when Groq Whisper runs for the current session. Caption transcripts and cached transcripts do not add Whisper seconds. `transcript_source` is a session rollup, so mixed sessions can store values such as `captions,whisper`; per-video transcript source remains on `video_metadata`. Chat token counts use provider-reported stream usage when available and otherwise use a deterministic character-count estimate.
+
 ## Vector Payload
 
 Qdrant chunks include:
@@ -115,7 +135,7 @@ Payload indexes are created for `session_id`, `video_id`, and `is_hook`.
 
 - `GET /health`: checks API, Postgres, and Qdrant.
 - `POST /ingest`: accepts two video inputs and returns `session_id`.
-- `GET /status/{session_id}`: returns status, progress, errors, and metadata. If a `processing` session has not updated within `INGEST_STALE_SECONDS`, this endpoint marks it `failed`.
+- `GET /status/{session_id}`: returns status, progress, errors, and metadata. If a `processing` session has not updated within `INGEST_STALE_SECONDS`, this endpoint marks it `failed`. The read path loads the session and metadata in one Postgres session and logs the returned status, step, progress, and metadata count.
 - `GET /messages/{session_id}`: returns persisted chat history.
 - `POST /chat`: streams SSE events for sources, tokens, done, or errors. Accepts `completed` sessions and older `ready` sessions. `sources` and `done` events include `route` and `retrieval_policy` for route-aware evals.
 

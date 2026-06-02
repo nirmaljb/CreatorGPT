@@ -36,7 +36,7 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Use typed metadata tools instead of a free-form SQL agent.
 - Use transcript retrieval only for semantic questions.
 - Use first-5-second chunks for hook comparison.
-- Add citation validation and an eval script for assignment questions.
+- Add citation validation, per-session usage accounting, and an eval script for assignment questions.
 
 ### Phase 3 — Product UI
 
@@ -56,7 +56,7 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - FastAPI backend.
 - Next.js frontend.
 - LangGraph orchestration.
-- Neon Postgres for durable sessions, video metadata, and chat history.
+- Neon Postgres for durable sessions, video metadata, chat history, and internal usage ledger rows.
 - Qdrant Cloud for vector search.
 - Groq `llama-3.3-70b-versatile` for streaming chat during testing.
 - FastEmbed `BAAI/bge-small-en-v1.5` for embeddings during testing.
@@ -116,6 +116,9 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Comparison and metadata-augmented comparison routes retrieve balanced evidence with `top_k=4` from Video A and `top_k=4` from Video B, then merge the context. Do not replace this with one global vector search unless evals prove a better policy.
 - Mixed comparison answers must cite transcript chunk evidence when chunks are retrieved, not only metadata metrics.
 - `/chat` SSE `sources` and `done` events expose `route` and `retrieval_policy` so evals can assert routing behavior directly.
+- A simple internal `session_usage_ledger` row is created per ingest session. It records video count, transcript-source rollup, Whisper seconds, chunk/embedding counts, cache hit/miss counts, chat token counts, LLM model, embedding model, and creation time.
+- Session-level `transcript_source` in the usage ledger is a compact rollup. Mixed sessions can store values such as `captions,whisper`; per-video `video_metadata.transcript_source` remains the granular source of truth.
+- Chat token usage records provider-reported usage when the streaming provider returns it. If streamed usage is unavailable, the ledger records a deterministic character-count estimate so cost tracking is still populated.
 - Assignment evals are route-aware: the five required questions and extended adversarial questions assert expected route, expected retrieval policy when applicable, citation shape, numeric Postgres matches, unavailable metric handling, and A/B transcript evidence. Extended coverage includes stats scorecards, missing metrics, vague comparisons, creative synthesis, open-ended recommendations, multi-step prompts, and incorrect-premise engagement questions.
 - Assignment evals must report broken chat streams as per-question failures instead of crashing the whole run. The chat SSE generator should emit an `error` event for retrieval, prompt, provider, or persistence failures after the HTTP stream starts.
 - Assignment evals are run through `scripts/eval_assignment_questions.py`; reusable logic lives in `backend.evals.assignment_eval` for later mocked CI coverage.
@@ -133,7 +136,8 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Session status includes persisted progress fields: `current_step` and `progress_percent`. The frontend uses them to show ingestion progress and to poll adaptively instead of using a fixed short interval.
 - Phase 1 does not implement retry. A browser refresh starts a clean frontend state instead of restoring the previous `session_id`; a later retry flow should be explicit and should not silently resume a stale failed session.
 - `GET /status/{session_id}` marks long-stale `processing` sessions as `failed` after `INGEST_STALE_SECONDS`, so stopped background tasks surface as readable frontend errors instead of remaining stuck forever.
-- The frontend treats network loss separately from ingestion failure. Offline/API-unreachable polling pauses with a visible connection message and resumes status loading when the browser comes back online.
+- `GET /status/{session_id}` reads the session row and video metadata in one Postgres session and logs status, step, progress, and metadata count for debugging stuck frontend progress.
+- The frontend treats network loss separately from ingestion failure. Browser-offline polling pauses with a visible connection message; slow, timed-out, or API-unreachable status requests keep retrying while the browser is online.
 - YouTube ingestion first tries `youtube-transcript-api` captions and normalizes captions into the same `{text, start, end}` shape as Whisper output. If captions are unavailable or the caption API fails, ingestion falls back to `yt-dlp` audio extraction plus Groq `whisper-large-v3`.
 - YouTube caption transcripts are not capped by `MAX_VIDEO_SECONDS`; long YouTube videos can ingest through captions without Whisper. `MAX_VIDEO_SECONDS` only limits audio download/Whisper fallback.
 - Per-video transcript/vector work now runs concurrently with `asyncio.gather` after both metadata rows are stored. Blocking operations run through `asyncio.to_thread`.

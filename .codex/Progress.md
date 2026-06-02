@@ -105,6 +105,11 @@ Phase 2 implementation.
 - Added `REQUIRE_QDRANT_ON_STARTUP` for fail-fast deployments and `QDRANT_CHECK_COMPATIBILITY=false` to suppress Qdrant server-version probe warnings by default.
 - Changed `/chat` streaming so retrieval, prompt construction, provider streaming, and chat persistence failures are logged and emitted as SSE `error` events instead of abruptly closing the chunked response.
 - Hardened `scripts/eval_assignment_questions.py` so broken chunked chat streams, SSE error events, and per-question chat request failures are recorded as failed eval cases while the rest of the suite continues.
+- Added an internal `session_usage_ledger` Postgres table with per-session video count, transcript-source rollup, Whisper seconds, chunk/embedding counts, chat token counts, model names, cache hit/miss counts, and creation time.
+- Wired ingestion to create usage ledger rows, count transcript cache hits/misses, count uncached Groq Whisper seconds, and record chunk/embedding counts after Qdrant upsert.
+- Wired chat streaming to record provider-reported prompt/completion tokens when available and deterministic token estimates when stream usage is unavailable.
+- Fixed stuck frontend status polling by adding a timeout around `/status` fetches and rescheduling polling after transient status failures while the browser remains online.
+- Changed `GET /status/{session_id}` to load the session and video metadata in one Postgres session, and added status response logs with status, step, progress, and metadata count.
 
 ## Current Next Step
 
@@ -208,3 +213,8 @@ Run `python scripts/eval_assignment_questions.py --session-id <id>` against a co
 - `make backend-lint` passed after hardening chat-stream and eval-stream error handling.
 - `make backend-tests` passed after hardening chat-stream and eval-stream error handling; backend tests now report 65 selected tests plus 1 deselected smoke test.
 - `make ci` and `git diff --check` passed after hardening chat-stream and eval-stream error handling.
+- `backend/.venv/bin/python -m pytest backend/tests/test_chat_client.py backend/tests/test_usage_ledger.py backend/tests/test_rag_service.py` passed after adding the usage ledger.
+- `make backend-lint`, `make backend-tests`, `make markdown-lint`, `git diff --check`, and `make ci` passed after adding the usage ledger; backend tests now report 69 selected tests plus 1 deselected smoke test.
+- `curl -sS --max-time 5 http://127.0.0.1:8000/status/58e0d15d-eeb1-4388-a27d-53f7517a8540` returned `completed`, progress `100`, and both metadata rows after investigating the stuck frontend report.
+- `backend/.venv/bin/python -m pytest backend/tests/test_postgres_session.py backend/tests/test_status_endpoint.py`, `make frontend-typecheck`, and `make frontend-lint` passed after the status polling fix.
+- `make ci` passed after the status polling fix; backend tests now report 70 selected tests plus 1 deselected smoke test.

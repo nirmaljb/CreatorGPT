@@ -23,6 +23,30 @@ class SessionModel(Base):
     )
 
 
+class SessionUsageLedgerModel(Base):
+    __tablename__ = "session_usage_ledger"
+
+    session_id: Mapped[str] = mapped_column(String(64), ForeignKey("sessions.id"), primary_key=True)
+    video_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    transcribed_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    transcript_source: Mapped[str] = mapped_column(String(128), nullable=False, default="unavailable")
+    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    embedding_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    chat_prompt_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    chat_completion_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    llm_model: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    embedding_model: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    cache_hit: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cache_miss: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
 class VideoMetadataModel(Base):
     __tablename__ = "video_metadata"
     __table_args__ = (UniqueConstraint("session_id", "video_id", name="uq_video_per_session"),)

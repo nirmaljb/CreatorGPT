@@ -54,6 +54,7 @@ def init_db() -> None:
     Base.metadata.create_all(bind=get_engine())
     ensure_session_progress_columns()
     ensure_video_ingestion_columns()
+    ensure_usage_ledger_columns()
 
 
 def ensure_session_progress_columns() -> None:
@@ -85,6 +86,58 @@ def ensure_video_ingestion_columns() -> None:
         )
         conn.execute(
             text("alter table video_metadata add column if not exists transcript_cached boolean not null default false")
+        )
+
+
+def ensure_usage_ledger_columns() -> None:
+    with get_engine().begin() as conn:
+        conn.execute(
+            text("alter table session_usage_ledger add column if not exists video_count integer not null default 0")
+        )
+        conn.execute(
+            text(
+                "alter table session_usage_ledger "
+                "add column if not exists transcribed_seconds double precision not null default 0"
+            )
+        )
+        conn.execute(
+            text(
+                "alter table session_usage_ledger "
+                "add column if not exists transcript_source varchar(128) not null default 'unavailable'"
+            )
+        )
+        conn.execute(
+            text("alter table session_usage_ledger add column if not exists chunk_count integer not null default 0")
+        )
+        conn.execute(
+            text("alter table session_usage_ledger add column if not exists embedding_count integer not null default 0")
+        )
+        conn.execute(
+            text(
+                "alter table session_usage_ledger "
+                "add column if not exists chat_prompt_tokens integer not null default 0"
+            )
+        )
+        conn.execute(
+            text(
+                "alter table session_usage_ledger "
+                "add column if not exists chat_completion_tokens integer not null default 0"
+            )
+        )
+        conn.execute(
+            text("alter table session_usage_ledger add column if not exists llm_model varchar(128) not null default ''")
+        )
+        conn.execute(
+            text(
+                "alter table session_usage_ledger "
+                "add column if not exists embedding_model varchar(128) not null default ''"
+            )
+        )
+        conn.execute(
+            text("alter table session_usage_ledger add column if not exists cache_hit integer not null default 0")
+        )
+        conn.execute(
+            text("alter table session_usage_ledger add column if not exists cache_miss integer not null default 0")
         )
 
 

@@ -62,8 +62,9 @@ type StatusResponse = {
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+const STATUS_REQUEST_TIMEOUT_MS = 7000;
 const NETWORK_MESSAGE =
-  "Connection is unavailable. Status polling will resume when the browser is online and the API is reachable.";
+  "Connection is unavailable or slow. Status polling will keep retrying when the browser is online.";
 
 function toErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
@@ -72,7 +73,17 @@ function toErrorMessage(error: unknown) {
 }
 
 function isNetworkError(error: unknown) {
-  return (typeof navigator !== "undefined" && !navigator.onLine) || error instanceof TypeError;
+  return (
+    (typeof navigator !== "undefined" && !navigator.onLine) ||
+    error instanceof TypeError ||
+    (error instanceof DOMException && error.name === "AbortError")
+  );
+}
+
+function statusPollDelay(progressPercent: number) {
+  if (progressPercent < 25) return 2500;
+  if (progressPercent < 95) return 8000;
+  return 5000;
 }
 
 function formatNumber(value: number) {
@@ -181,19 +192,27 @@ export default function Home() {
 
   const handleRequestError = useCallback((exception: unknown, fallback: string) => {
     if (isNetworkError(exception)) {
-      console.warn("Network/API request failed; polling is paused until connectivity returns", exception);
+      console.warn("Network/API request failed; status polling will retry", exception);
       setNetworkMessage(NETWORK_MESSAGE);
       return;
     }
     setError(toErrorMessage(exception) || fallback);
   }, []);
 
-  const loadStatus = useCallback(async (id: string) => {
-    const response = await fetch(`${API_BASE}/status/${id}`, { cache: "no-store" });
+  const loadStatus = useCallback(async (id: string, signal?: AbortSignal) => {
+    console.info("Loading status", { sessionId: id });
+    const response = await fetch(`${API_BASE}/status/${id}`, { cache: "no-store", signal });
     if (!response.ok) {
       throw new Error(`Status request failed: ${response.status}`);
     }
     const data: StatusResponse = await response.json();
+    console.info("Status loaded", {
+      sessionId: id,
+      status: data.status,
+      step: data.current_step,
+      progress: data.progress_percent,
+      metadataCount: data.metadata?.length || 0
+    });
     setNetworkMessage(null);
     setStatus(data.status);
     setMetadata(data.metadata || []);
@@ -241,17 +260,51 @@ export default function Home() {
 
   useEffect(() => {
     if (!sessionId || !isOnline) return;
-    loadStatus(sessionId).catch((exc) => handleRequestError(exc, "Status request failed"));
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), STATUS_REQUEST_TIMEOUT_MS);
+    loadStatus(sessionId, controller.signal)
+      .catch((exc) => handleRequestError(exc, "Status request failed"))
+      .finally(() => window.clearTimeout(timeout));
     loadMessages(sessionId).catch(() => undefined);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
   }, [handleRequestError, isOnline, loadMessages, loadStatus, sessionId]);
 
   useEffect(() => {
     if (!sessionId || status !== "processing" || !isOnline) return;
-    const delay = progressPercent < 25 ? 2500 : progressPercent < 95 ? 8000 : 5000;
-    const timeout = window.setTimeout(() => {
-      loadStatus(sessionId).catch((exc) => handleRequestError(exc, "Status request failed"));
-    }, delay);
-    return () => window.clearTimeout(timeout);
+    let stopped = false;
+    let pollTimeout: number | undefined;
+    let controller: AbortController | undefined;
+
+    const poll = async () => {
+      controller = new AbortController();
+      const requestTimeout = window.setTimeout(() => controller?.abort(), STATUS_REQUEST_TIMEOUT_MS);
+      let nextProgress = progressPercent;
+      try {
+        const data = await loadStatus(sessionId, controller.signal);
+        nextProgress = data.progress_percent || 0;
+      } catch (exc) {
+        handleRequestError(exc, "Status request failed");
+      } finally {
+        window.clearTimeout(requestTimeout);
+      }
+
+      if (!stopped) {
+        pollTimeout = window.setTimeout(poll, statusPollDelay(nextProgress));
+      }
+    };
+
+    pollTimeout = window.setTimeout(() => {
+      void poll();
+    }, statusPollDelay(progressPercent));
+
+    return () => {
+      stopped = true;
+      controller?.abort();
+      if (pollTimeout) window.clearTimeout(pollTimeout);
+    };
   }, [handleRequestError, isOnline, loadStatus, sessionId, status, progressPercent]);
 
   async function handleIngest(event: FormEvent<HTMLFormElement>) {

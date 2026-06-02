@@ -50,7 +50,7 @@ Add a short GIF or video here that shows:
 | Media extraction | `yt-dlp`, `ffmpeg` | Reads video metadata and downloads temporary audio |
 | Embeddings | FastEmbed `BAAI/bge-small-en-v1.5` | Converts transcript chunks into vectors |
 | Vector database | Qdrant Cloud | Stores and searches transcript chunks |
-| Relational database | Neon Postgres | Stores sessions, video metadata, raw metadata, cache, and chat history |
+| Relational database | Neon Postgres | Stores sessions, video metadata, raw metadata, cache, chat history, and usage ledger |
 | Backend tests | Pytest | Runs unit and mocked smoke tests |
 | Backend lint | Ruff | Checks and formats Python code |
 | Frontend checks | ESLint, TypeScript, Next build | Checks frontend code and production build |

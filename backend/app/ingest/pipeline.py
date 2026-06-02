@@ -15,7 +15,9 @@ from backend.app.ingest.cache import (
 from backend.app.ingest.chunker import chunk_transcript
 from backend.app.ingest.extractors import TranscriptResult, get_platform_extractor
 from backend.app.store.postgres import (
+    create_session_usage_ledger,
     get_extraction_cache,
+    record_video_usage,
     update_session_progress,
     update_session_status,
     update_video_ingest_status,
@@ -183,6 +185,19 @@ async def load_or_extract_transcript(
     return result
 
 
+def _transcribed_seconds(result: TranscriptResult, metadata: dict, transcript_cached: bool) -> float:
+    if transcript_cached or result.source != "whisper":
+        return 0.0
+
+    settings = get_settings()
+    duration_seconds = float(metadata.get("duration_seconds") or 0.0)
+    if duration_seconds > 0:
+        return min(duration_seconds, float(settings.max_video_seconds))
+
+    word_ends = [float(word.get("end") or 0.0) for word in result.words if isinstance(word, dict)]
+    return max(word_ends, default=0.0)
+
+
 async def process_video_transcript(
     video: dict,
     metadata: dict,
@@ -192,6 +207,9 @@ async def process_video_transcript(
     video_id = video["video_id"]
     video_started_at = time.monotonic()
     audio_path: str | None = None
+    usage_recorded = False
+    transcript_cached = False
+    transcript_source = "unavailable"
 
     logger.info(
         "Transcript/vector pass for Video %s session_id=%s platform=%s url=%s",
@@ -243,6 +261,18 @@ async def process_video_transcript(
             upserted,
             transcript_cached,
         )
+        await asyncio.to_thread(
+            record_video_usage,
+            metadata["session_id"],
+            transcript_source,
+            _transcribed_seconds(result, metadata, transcript_cached),
+            upserted,
+            upserted,
+            int(transcript_cached),
+            int(not transcript_cached),
+            get_settings().embedding_model,
+        )
+        usage_recorded = True
 
         await progress.set_video(video_id, f"Finished Video {video_id}", 100)
         logger.info(
@@ -268,6 +298,18 @@ async def process_video_transcript(
             str(exc),
             "unavailable",
         )
+        if not usage_recorded:
+            await asyncio.to_thread(
+                record_video_usage,
+                metadata["session_id"],
+                transcript_source or "unavailable",
+                0.0,
+                0,
+                0,
+                int(transcript_cached),
+                int(not transcript_cached),
+                get_settings().embedding_model,
+            )
         if audio_path:
             try:
                 await asyncio.to_thread(Path(audio_path).unlink, missing_ok=True)
@@ -286,6 +328,7 @@ async def ingest_session_async(session_id: str, videos: list[dict]) -> None:
     started_at = time.monotonic()
     try:
         logger.info("Ingestion started session_id=%s video_count=%s", session_id, len(videos))
+        await asyncio.to_thread(create_session_usage_ledger, session_id, len(videos))
         await asyncio.to_thread(
             update_session_status,
             session_id,
@@ -350,6 +393,17 @@ async def ingest_session_async(session_id: str, videos: list[dict]) -> None:
                         cache_key=cache_key,
                         error_message=str(exc),
                     ),
+                )
+                await asyncio.to_thread(
+                    record_video_usage,
+                    session_id,
+                    "unavailable",
+                    0.0,
+                    0,
+                    0,
+                    0,
+                    1,
+                    get_settings().embedding_model,
                 )
                 metadata_errors.append(f"Video {video_id}: {exc}")
 

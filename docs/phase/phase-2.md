@@ -14,6 +14,7 @@ Included in this phase:
 - Resolve simple follow-up questions from recent chat context before routing.
 - Add citation validation for metadata and transcript claims.
 - Expose chat route traces in SSE so evals can verify the selected path.
+- Add a simple internal per-session usage ledger for ingest and chat cost signals.
 - Add an eval script for the assignment's required question set.
 
 Out of scope for this phase:
@@ -95,7 +96,14 @@ flowchart TD
     C -- No --> Prompt
     QD --> Prompt
     Prompt --> Stream[Stream cited answer]
+    Stream --> Ledger[Update session usage ledger]
 ```
+
+## Usage Ledger
+
+Phase 2 records a compact internal `session_usage_ledger` row per ingest session. The row tracks `session_id`, `video_count`, `transcribed_seconds`, `transcript_source`, `chunk_count`, `embedding_count`, `chat_prompt_tokens`, `chat_completion_tokens`, `llm_model`, `embedding_model`, `cache_hit`, `cache_miss`, and `created_at`.
+
+This is not a user-facing analytics feature yet. It is a cost/debug signal for demo readiness and future scale notes. Whisper seconds are counted only for uncached Groq Whisper transcription. Caption and cached transcript paths keep transcription cost at zero for the current session. Mixed sessions roll up transcript sources into strings such as `captions,whisper`.
 
 ## Tradeoffs
 
@@ -103,3 +111,4 @@ flowchart TD
 - Follow-up handling is intentionally minimal. It resolves obvious video references, but does not rewrite every conversational turn.
 - Improvement retrieval uses targeted Video A and Video B semantic queries instead of reranking. Reranking remains out of scope unless evals prove retrieval quality is the bottleneck.
 - Balanced comparison retrieval may include slightly less globally similar evidence, but it prevents one video from crowding out the other in A/B answers.
+- Chat token usage uses provider-reported stream usage when available. When a streaming provider does not return usage, the ledger stores a deterministic character-count estimate instead of leaving the field empty.

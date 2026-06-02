@@ -1,17 +1,27 @@
 import logging
+import threading
 from datetime import datetime, timezone
 
 from sqlalchemy import select
 
+from backend.app.core.config import get_settings
 from backend.app.store.database import db_session
-from backend.app.store.models import ChatMessageModel, ExtractionCacheModel, SessionModel, VideoMetadataModel
+from backend.app.store.models import (
+    ChatMessageModel,
+    ExtractionCacheModel,
+    SessionModel,
+    SessionUsageLedgerModel,
+    VideoMetadataModel,
+)
 
 logger = logging.getLogger(__name__)
+_usage_ledger_lock = threading.Lock()
 
 TERMINAL_VIDEO_STATUSES = {"completed", "failed"}
 STALE_INGEST_MESSAGE = (
     "Ingestion stalled because the background worker stopped before completion. Start a new ingest session."
 )
+TRANSCRIPT_SOURCE_ORDER = ("captions", "whisper", "unavailable")
 
 
 def create_session(session_id: str) -> None:
@@ -24,6 +34,33 @@ def create_session(session_id: str) -> None:
                 progress_percent=0,
             )
         )
+
+
+def create_session_usage_ledger(session_id: str, video_count: int) -> None:
+    settings = get_settings()
+    with _usage_ledger_lock, db_session() as db:
+        row = db.get(SessionUsageLedgerModel, session_id)
+        if row is None:
+            db.add(
+                SessionUsageLedgerModel(
+                    session_id=session_id,
+                    video_count=video_count,
+                    llm_model=settings.groq_chat_model,
+                    embedding_model=settings.embedding_model,
+                )
+            )
+            logger.info(
+                "Created usage ledger session_id=%s video_count=%s llm_model=%s embedding_model=%s",
+                session_id,
+                video_count,
+                settings.groq_chat_model,
+                settings.embedding_model,
+            )
+            return
+
+        row.video_count = video_count
+        row.llm_model = row.llm_model or settings.groq_chat_model
+        row.embedding_model = row.embedding_model or settings.embedding_model
 
 
 def update_session_status(
@@ -59,6 +96,108 @@ def _aware_datetime(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value
+
+
+def _usage_row_is_empty(row: SessionUsageLedgerModel) -> bool:
+    return (
+        row.transcribed_seconds == 0
+        and row.chunk_count == 0
+        and row.embedding_count == 0
+        and row.chat_prompt_tokens == 0
+        and row.chat_completion_tokens == 0
+        and row.cache_hit == 0
+        and row.cache_miss == 0
+    )
+
+
+def _merge_transcript_source(existing: str | None, incoming: str | None, replace_placeholder: bool) -> str:
+    incoming_source = (incoming or "unavailable").strip() or "unavailable"
+    existing_sources = {
+        source.strip()
+        for source in (existing or "").split(",")
+        if source.strip() and not (replace_placeholder and source.strip() == "unavailable")
+    }
+    existing_sources.add(incoming_source)
+    ordered = [source for source in TRANSCRIPT_SOURCE_ORDER if source in existing_sources]
+    ordered.extend(sorted(existing_sources.difference(TRANSCRIPT_SOURCE_ORDER)))
+    return ",".join(ordered) if ordered else "unavailable"
+
+
+def record_video_usage(
+    session_id: str,
+    transcript_source: str,
+    transcribed_seconds: float = 0.0,
+    chunk_count: int = 0,
+    embedding_count: int = 0,
+    cache_hit: int = 0,
+    cache_miss: int = 0,
+    embedding_model: str | None = None,
+) -> None:
+    settings = get_settings()
+    with _usage_ledger_lock, db_session() as db:
+        row = db.get(SessionUsageLedgerModel, session_id)
+        if row is None:
+            row = SessionUsageLedgerModel(
+                session_id=session_id,
+                video_count=0,
+                llm_model=settings.groq_chat_model,
+                embedding_model=embedding_model or settings.embedding_model,
+            )
+            db.add(row)
+
+        row.transcript_source = _merge_transcript_source(
+            row.transcript_source,
+            transcript_source,
+            replace_placeholder=_usage_row_is_empty(row),
+        )
+        row.transcribed_seconds += max(0.0, float(transcribed_seconds or 0.0))
+        row.chunk_count += max(0, int(chunk_count or 0))
+        row.embedding_count += max(0, int(embedding_count or 0))
+        row.cache_hit += max(0, int(cache_hit or 0))
+        row.cache_miss += max(0, int(cache_miss or 0))
+        row.embedding_model = embedding_model or row.embedding_model or settings.embedding_model
+        logger.info(
+            "Recorded video usage session_id=%s transcript_source=%s transcribed_seconds=%.2f "
+            "chunk_count=%s embedding_count=%s cache_hit=%s cache_miss=%s",
+            session_id,
+            transcript_source,
+            transcribed_seconds,
+            chunk_count,
+            embedding_count,
+            cache_hit,
+            cache_miss,
+        )
+
+
+def record_chat_usage(
+    session_id: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    llm_model: str | None = None,
+) -> None:
+    settings = get_settings()
+    with _usage_ledger_lock, db_session() as db:
+        row = db.get(SessionUsageLedgerModel, session_id)
+        if row is None:
+            row = SessionUsageLedgerModel(
+                session_id=session_id,
+                video_count=0,
+                llm_model=llm_model or settings.groq_chat_model,
+                embedding_model=settings.embedding_model,
+            )
+            db.add(row)
+
+        row.chat_prompt_tokens += max(0, int(prompt_tokens or 0))
+        row.chat_completion_tokens += max(0, int(completion_tokens or 0))
+        row.llm_model = llm_model or row.llm_model or settings.groq_chat_model
+        row.embedding_model = row.embedding_model or settings.embedding_model
+        logger.info(
+            "Recorded chat usage session_id=%s prompt_tokens=%s completion_tokens=%s llm_model=%s",
+            session_id,
+            prompt_tokens,
+            completion_tokens,
+            row.llm_model,
+        )
 
 
 def is_stale_processing_session(
@@ -190,6 +329,32 @@ def _video_to_dict(row: VideoMetadataModel) -> dict:
     }
 
 
+def _usage_ledger_to_dict(row: SessionUsageLedgerModel) -> dict:
+    return {
+        "session_id": row.session_id,
+        "video_count": row.video_count,
+        "transcribed_seconds": row.transcribed_seconds,
+        "transcript_source": row.transcript_source,
+        "chunk_count": row.chunk_count,
+        "embedding_count": row.embedding_count,
+        "chat_prompt_tokens": row.chat_prompt_tokens,
+        "chat_completion_tokens": row.chat_completion_tokens,
+        "llm_model": row.llm_model,
+        "embedding_model": row.embedding_model,
+        "cache_hit": row.cache_hit,
+        "cache_miss": row.cache_miss,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+def get_session_usage_ledger(session_id: str) -> dict | None:
+    with db_session() as db:
+        row = db.get(SessionUsageLedgerModel, session_id)
+        if row is None:
+            return None
+        return _usage_ledger_to_dict(row)
+
+
 def get_video_metadata(session_id: str) -> list[dict]:
     with db_session() as db:
         rows = db.scalars(
@@ -205,6 +370,11 @@ def get_session(session_id: str) -> dict | None:
         row = db.get(SessionModel, session_id)
         if row is None:
             return None
+        videos = db.scalars(
+            select(VideoMetadataModel)
+            .where(VideoMetadataModel.session_id == session_id)
+            .order_by(VideoMetadataModel.video_id)
+        ).all()
         return {
             "session_id": row.id,
             "status": row.status,
@@ -212,7 +382,7 @@ def get_session(session_id: str) -> dict | None:
             "current_step": row.current_step,
             "progress_percent": row.progress_percent,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-            "metadata": get_video_metadata(session_id),
+            "metadata": [_video_to_dict(video) for video in videos],
         }
 
 

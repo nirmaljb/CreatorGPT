@@ -290,7 +290,8 @@ flowchart LR
   - Future retry should be explicit and should preserve the original failure reason.
 
 - Frontend network handling over treating every fetch failure as ingest failure:
-  - Browser offline/API-unreachable states show a connection message and pause polling.
+  - Browser offline state shows a connection message and pauses polling.
+  - Slow, timed-out, or API-unreachable status requests show a connection message but keep retrying while the browser is online.
   - Polling resumes when the browser comes back online.
 
 - FastAPI background task over durable queue:
