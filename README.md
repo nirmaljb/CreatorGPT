@@ -1,29 +1,16 @@
 # Creator Video RAG Comparator
 
-This app compares one YouTube video and one Instagram Reel. It collects video metadata, gets transcripts, stores the useful text for search, and lets a user ask questions in a chat window. The answers stream back with citations, so the user can see whether each fact came from video metadata or transcript text.
+## Project overview
 
-The project is built for a demo flow:
+This app compares one YouTube video and one Instagram Reel. It extracts metadata, gets transcripts, stores searchable transcript chunks, and answers questions in a streaming chat UI with citations.
 
-```text
-YouTube URL + Instagram Reel URL
--> ingest both videos
--> store metadata and transcripts
--> mark the session completed
--> answer chat questions with citations
-```
+The goal is simple: help a user understand why two creator videos performed differently, using real metadata and transcript evidence instead of invented facts.
 
-## Demo
-
-Add a short GIF or video here that shows:
-
-- entering one YouTube URL and one Instagram Reel URL
-- ingest progress reaching `completed`
-- asking a question
-- receiving a streamed cited answer
+Leave space here for the demo media:
 
 <!-- Demo GIF or video placeholder -->
 
-## Documentation
+### Project documents
 
 | Document | What It Explains | Best For |
 | --- | --- | --- |
@@ -37,12 +24,71 @@ Add a short GIF or video here that shows:
 | [Phase 4](docs/phase/phase-4.md) | CI, smoke tests, and demo readiness | Release readiness |
 | [Agent Notes](AGENTS.md) | Developer workflow and important project decisions | Contributors |
 
-## Technologies
+## Features
+
+- Ingests two video URLs in one session.
+- Supports YouTube and Instagram video slots.
+- Returns a `session_id` immediately from ingestion.
+- Stores video metadata and raw extractor metadata in Postgres.
+- Uses YouTube captions first when they are available.
+- Uses Groq `whisper-large-v3` for hosted transcription when captions are unavailable.
+- Chunks transcripts and stores vectors in Qdrant.
+- Streams chat answers with source citations.
+- Routes numeric questions to Postgres metadata instead of vector search.
+- Routes transcript questions to Qdrant retrieval.
+- Uses balanced retrieval for comparison questions so both videos are represented.
+- Includes evals for the assignment questions and harder edge cases.
+- Includes provider-mocked CI so regular checks do not need real Groq, Neon, Qdrant, YouTube, or Instagram access.
+
+## Architecture
+
+```mermaid
+flowchart TD
+    user["User enters YouTube and Instagram URLs"]
+    frontend["Next.js frontend"]
+    ingest["POST /ingest"]
+    limits["Backpressure checks"]
+    session["Create Postgres session"]
+    metadata["Extract and store metadata"]
+    transcript{"Transcript path"}
+    captions["YouTube captions"]
+    whisper["Groq Whisper transcription"]
+    chunks["Chunk transcript text"]
+    embed["Embed chunks with FastEmbed"]
+    qdrant["Store chunks in Qdrant"]
+    status["GET /status by session_id"]
+    chat["POST /chat"]
+    router{"Question route"}
+    pg["Postgres metadata tools"]
+    retrieve["Qdrant retrieval policies"]
+    llm["Groq chat model"]
+    answer["Stream cited answer"]
+
+    user --> frontend --> ingest --> limits --> session --> metadata --> transcript
+    transcript -->|Captions available| captions
+    transcript -->|Captions unavailable or Instagram| whisper
+    captions --> chunks
+    whisper --> chunks
+    chunks --> embed --> qdrant
+    frontend --> status
+    frontend --> chat --> router
+    router -->|Numeric or creator question| pg
+    router -->|Transcript question| retrieve
+    router -->|Mixed comparison| pg
+    router -->|Mixed comparison| retrieve
+    pg --> llm
+    retrieve --> llm
+    llm --> answer --> frontend
+```
+
+The app does not silently fall back to fake data. If a provider fails, the session or video should show a clear error.
+
+## Tech stack
 
 | Area | Technology | Purpose |
 | --- | --- | --- |
-| Frontend | Next.js, React, TypeScript | Web app, video inputs, status display, and chat UI |
-| Backend API | FastAPI | Ingest, status, messages, health, and chat endpoints |
+| Frontend | Next.js, React, TypeScript | Video inputs, status display, runtime limits, and chat UI |
+| Backend API | FastAPI | Ingest, status, messages, health, config, and chat endpoints |
 | Orchestration | LangGraph | Routes each question to metadata, transcript search, or both |
 | Chat model | Groq `llama-3.3-70b-versatile` | Streams final chat answers |
 | Transcription | Groq `whisper-large-v3` | Creates transcripts when captions are unavailable |
@@ -58,47 +104,7 @@ Add a short GIF or video here that shows:
 | CI | GitHub Actions | Runs lint, tests, build, markdown lint, and mocked smoke test |
 | Deployment | Docker, Render | Builds the backend with system media tools and deploys it as a web service |
 
-## High-Level Pipeline
-
-```mermaid
-flowchart TD
-    A["User enters YouTube URL and Instagram Reel URL"]
-    B["POST /ingest"]
-    C["Apply concurrency and session-rate limits"]
-    D["Create session and return session_id immediately"]
-    E["Extract real metadata for both videos"]
-    F["Store metadata and raw metadata in Postgres"]
-    G{Transcript path}
-    H["YouTube captions"]
-    I["Groq Whisper transcription"]
-    J["Split transcripts into capped chunks"]
-    K["Embed chunks with FastEmbed"]
-    L["Store searchable chunks in Qdrant"]
-    M["GET /status/{session_id}"]
-    N["Session reaches completed or clear failed state"]
-    O["POST /chat"]
-    P{Question type}
-    Q["Numeric or creator question<br/>Use Postgres metadata only"]
-    R["Transcript question<br/>Use capped Qdrant retrieval"]
-    S["Mixed comparison question<br/>Use Postgres metadata and Qdrant"]
-    T["Stream answer with source citations"]
-
-    A --> B --> C --> D --> E --> F --> G
-    G -->|YouTube captions available| H
-    G -->|Captions unavailable or Instagram| I
-    H --> J
-    I --> J
-    J --> K --> L --> M --> N --> O --> P
-    P --> Q --> T
-    P --> R --> T
-    P --> S --> T
-```
-
-The app should not silently fall back to fake data. If a provider fails, the session or video should show a clear error.
-
-## Installation Guide
-
-### 1. Install System Tools
+## Setup
 
 Install these first:
 
@@ -107,17 +113,50 @@ Install these first:
 - npm
 - `ffmpeg`
 
-`ffmpeg` is needed for reliable audio extraction before transcription.
-
-### 2. Create Environment File
-
-Copy the example file:
+Create the environment file:
 
 ```bash
 cp .env.example .env
 ```
 
-Then fill in these required values in `.env`:
+Install backend dependencies:
+
+```bash
+python -m venv backend/.venv
+backend/.venv/bin/python -m pip install -r backend/requirements.txt
+backend/.venv/bin/python -m pip install -r backend/requirements-dev.txt
+```
+
+Install frontend dependencies:
+
+```bash
+cd frontend
+npm ci
+cd ..
+```
+
+### Render backend setup
+
+The backend can deploy as a Docker web service on Render.
+
+Use these Render settings:
+
+| Setting | Value |
+| --- | --- |
+| Runtime | Docker |
+| Root directory | Blank or `.` |
+| Dockerfile path | `./backend/Dockerfile` |
+| Docker context | `.` |
+| Docker command | Leave blank |
+| Health check path | `/health` |
+
+The Docker image installs `ffmpeg`, writes temporary media to `/tmp/creator-rag`, and starts Uvicorn on `0.0.0.0` using Render's `PORT`.
+
+You can also apply [render.yaml](render.yaml) as a Render Blueprint. It defines the backend Docker service and marks secret values as manual Render environment variables.
+
+## Environment variables
+
+Required backend variables:
 
 | Variable | What It Is For |
 | --- | --- |
@@ -126,20 +165,28 @@ Then fill in these required values in `.env`:
 | `QDRANT_URL` | Qdrant Cloud URL |
 | `QDRANT_API_KEY` | Qdrant Cloud API key |
 
-Optional values are already shown in [.env.example](.env.example).
-By default, the backend can start when Qdrant is temporarily unreachable and `/health` will show `qdrant: false`.
-Set `REQUIRE_QDRANT_ON_STARTUP=true` if you want startup to fail when Qdrant validation fails.
-
-For a hosted frontend, set these together to avoid CORS errors:
+Hosted frontend and backend variables:
 
 | Variable | Where To Set It | Example |
 | --- | --- | --- |
-| `CORS_ORIGINS` | Backend | `https://your-frontend.onrender.com,https://your-custom-domain.com` |
+| `CORS_ORIGINS` | Backend | `https://your-frontend.onrender.com` |
+| `CORS_ORIGIN_REGEX` | Backend | Optional trusted preview-domain regex |
 | `NEXT_PUBLIC_API_BASE` | Frontend | `https://your-backend.onrender.com` |
 
-`CORS_ORIGIN_REGEX` is optional. Use it only for trusted preview domains.
+Useful backend defaults:
 
-Useful backpressure limits:
+| Variable | Default | What It Controls |
+| --- | --- | --- |
+| `GROQ_CHAT_MODEL` | `llama-3.3-70b-versatile` | Chat model used for streamed answers |
+| `GROQ_TRANSCRIPTION_MODEL` | `whisper-large-v3` | Hosted Whisper model used for transcription |
+| `EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | Embedding model used for transcript chunks |
+| `EMBEDDING_DIMENSIONS` | `384` | Qdrant vector size for the embedding model |
+| `QDRANT_COLLECTION` | `creator_video_chunks` | Qdrant collection name |
+| `REQUIRE_QDRANT_ON_STARTUP` | `false` | Whether startup fails when Qdrant validation fails |
+| `QDRANT_CHECK_COMPATIBILITY` | `false` | Whether Qdrant client checks server version at startup |
+| `FORCE_REFRESH` | `false` | Whether extraction cache reads are bypassed |
+
+Backpressure limits:
 
 | Variable | Default | What It Controls |
 | --- | --- | --- |
@@ -150,28 +197,11 @@ Useful backpressure limits:
 | `MAX_RETRIEVED_CHUNKS` | `8` | Maximum transcript chunks passed into a chat answer |
 | `MAX_SESSIONS_PER_IP_PER_HOUR` | `20` | Ingest sessions accepted per IP per hour |
 
-### 3. Install Backend
+Optional values are shown in [.env.example](.env.example).
 
-```bash
-python -m venv backend/.venv
-backend/.venv/bin/python -m pip install -r backend/requirements.txt
-```
+## Running locally
 
-For development checks, install the dev tools too:
-
-```bash
-backend/.venv/bin/python -m pip install -r backend/requirements-dev.txt
-```
-
-### 4. Install Frontend
-
-```bash
-cd frontend
-npm ci
-cd ..
-```
-
-### 5. Start Backend
+Start the backend:
 
 ```bash
 backend/.venv/bin/uvicorn backend.app.main:app --reload --reload-dir backend/app
@@ -179,38 +209,16 @@ backend/.venv/bin/uvicorn backend.app.main:app --reload --reload-dir backend/app
 
 The backend starts at `http://127.0.0.1:8000`.
 
-### 6. Start Frontend
-
-In a second terminal:
+Start the frontend in a second terminal:
 
 ```bash
 cd frontend
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3000`. If port `3000` is busy, Next.js may choose another port such as `3001`.
 
-If port `3000` is already busy, Next.js may choose another port such as `3001`.
-
-## Render Backend Deployment
-
-The backend can deploy as a Docker web service on Render.
-
-Render setup:
-
-1. Create a new Render Web Service.
-2. Choose Docker as the runtime.
-3. Use Dockerfile path `./backend/Dockerfile`.
-4. Use Docker context `.`.
-5. Keep the Docker command empty so Render uses the Dockerfile `CMD`.
-6. Set the backend environment variables from [.env.example](.env.example).
-7. Set `CORS_ORIGINS` to the deployed frontend origin.
-
-The Docker image installs `ffmpeg`, copies only the backend app, and starts Uvicorn on `0.0.0.0` using `${PORT:-10000}`. This matches Render's port-binding guidance for web services.
-
-You can also apply [render.yaml](render.yaml) as a Render Blueprint. It defines the backend Docker service and marks secret/provider values as manual Render environment variables.
-
-Local Docker smoke build:
+Run the backend through Docker:
 
 ```bash
 docker build -f backend/Dockerfile -t creator-rag-backend .
@@ -219,48 +227,13 @@ docker run --rm -p 10000:10000 --env-file .env creator-rag-backend
 
 Then open `http://localhost:10000/health`.
 
-## Local Checks
-
-Run the same checks as CI:
+Run all required checks:
 
 ```bash
 make ci
 ```
 
-This runs:
-
-- backend lint
-- backend tests
-- frontend lint
-- frontend typecheck
-- frontend build
-- markdown lint
-- mocked smoke test
-
-The required CI path uses mocked tests only. It does not need real Groq, Qdrant Cloud, Neon, YouTube, or Instagram access. Real-provider checks should be manual or nightly, not required for every commit.
-
-## Assignment Evals
-
-After ingesting a real YouTube + Instagram session and waiting for `completed`, run:
-
-```bash
-backend/.venv/bin/python scripts/eval_assignment_questions.py \
-  --api-base http://127.0.0.1:8000 \
-  --session-id <completed-session-id>
-```
-
-The eval asks the assignment questions plus harder stats, vague, creative, open-ended, multi-step, and incorrect-premise questions. It checks that:
-
-- the response streamed successfully
-- the answer is not empty
-- the answer has citations
-- the selected route and retrieval policy match the question type
-- numeric answers match Postgres metadata
-- missing counts or unsupported metrics are stated as unavailable
-- hook answers cite only early chunks
-- mixed and recommendation answers cite transcript evidence from both videos
-
-## Useful Commands
+Useful individual commands:
 
 | Command | Purpose |
 | --- | --- |
@@ -272,3 +245,144 @@ The eval asks the assignment questions plus harder stats, vague, creative, open-
 | `make frontend-build` | Build the Next.js app |
 | `make markdown-lint` | Check Markdown files |
 | `make ci` | Run all required checks |
+
+## Demo flow
+
+Small demo flow:
+
+```text
+YouTube URL + Instagram Reel URL
+  -> POST /ingest returns session_id immediately
+  -> GET /status/{session_id} reaches completed
+  -> POST /chat streams an answer
+  -> answer includes metadata and transcript citations
+```
+
+Manual demo steps:
+
+1. Start the backend and frontend.
+2. Enter one YouTube URL and one Instagram Reel URL.
+3. Confirm ingestion reaches `completed`.
+4. Ask: `What's the engagement rate of each?`
+5. Confirm the answer cites `[Video A metadata]` and `[Video B metadata]`.
+6. Ask: `Compare the hooks in the first 5 seconds.`
+7. Confirm the answer cites only early transcript chunks.
+
+Run assignment evals after a real session is completed:
+
+```bash
+backend/.venv/bin/python scripts/eval_assignment_questions.py \
+  --api-base http://127.0.0.1:8000 \
+  --session-id <completed-session-id>
+```
+
+The eval asks the assignment questions plus harder stats, vague, creative, open-ended, multi-step, and incorrect-premise questions.
+
+## API endpoints
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /health` | Checks API, Postgres, and Qdrant availability |
+| `GET /config` | Returns runtime backpressure limits for the frontend |
+| `POST /ingest` | Starts ingestion and returns `session_id` immediately |
+| `GET /status/{session_id}` | Returns session progress, terminal state, and video metadata |
+| `GET /messages/{session_id}` | Returns recent persisted chat messages |
+| `POST /chat` | Streams a cited answer with SSE events |
+
+`POST /ingest` accepts two generic video slots. The assignment demo normally uses Video A as YouTube and Video B as Instagram, but each slot can be marked as either platform.
+
+`POST /chat` streams events for answer tokens, sources, route information, retrieval policy, completion, and errors.
+
+## RAG design
+
+The system does not let the vector database answer numeric or creator metadata questions. Those questions use typed Postgres tools:
+
+- `get_video_metrics(session_id: str)`
+- `get_creator_info(session_id: str, video_id: str)`
+- `get_engagement_comparison(session_id: str)`
+- `get_session_video_summary(session_id: str)`
+
+Question routes:
+
+| Route | Used For | Evidence Source |
+| --- | --- | --- |
+| `METADATA_ONLY` | Engagement rate, views, likes, comments, creator, follower count | Postgres metadata only |
+| `TRANSCRIPT_ONLY` | Semantic questions about what a video says | Qdrant transcript chunks |
+| `HOOK_COMPARISON` | First 5 seconds or opening hook questions | Qdrant chunks where `is_hook=true` |
+| `MIXED_COMPARISON` | Performance explanations and A/B comparisons | Postgres metadata plus balanced transcript retrieval |
+| `IMPROVEMENT_SUGGESTION` | Advice for improving Video B based on Video A | Metadata plus A and B transcript evidence |
+| `FOLLOW_UP` | Short follow-up questions | Recent chat context, then re-routed |
+
+Retrieval policies:
+
+| Policy | Behavior |
+| --- | --- |
+| `hook_retrieval` | Filters by session and hook chunks |
+| `video_a_retrieval` | Retrieves chunks only from Video A |
+| `video_b_retrieval` | Retrieves chunks only from Video B |
+| `comparison_retrieval` | Retrieves from Video A and Video B separately, then merges context |
+| `metadata_augmented_retrieval` | Combines metadata tools with transcript chunks |
+
+Comparison routes do not use one global `top_k=8` search. They retrieve from Video A and Video B separately so one video does not crowd out the other.
+
+Citation format:
+
+| Source Type | Example |
+| --- | --- |
+| Metadata | `[Video A metadata]` |
+| Transcript chunk | `[Video A, chunk 3, 00:12-00:27]` |
+
+## Cost and scalability
+
+The app keeps a simple internal usage ledger per session. It tracks:
+
+- `session_id`
+- video count
+- transcribed seconds
+- transcript source rollup
+- chunk count
+- embedding count
+- chat prompt tokens
+- chat completion tokens
+- LLM model
+- embedding model
+- cache hits
+- cache misses
+- creation time
+
+The main cost drivers are Groq chat tokens, Groq Whisper seconds, Qdrant storage/search, and Postgres storage. YouTube captions are cheaper than Whisper because captions avoid audio transcription.
+
+Demo safeguards are already in place:
+
+- concurrent ingestion limit
+- per-IP hourly session limit
+- maximum Whisper/audio window
+- maximum chunks per video
+- maximum retrieved chunks
+- maximum chat history messages
+- extraction cache for repeat demos
+
+These safeguards are process-local and suitable for the demo. A production deployment should use distributed rate limiting and durable job coordination.
+
+## Known limitations
+
+- Instagram extraction may require cookies depending on account/video availability.
+- Some platforms do not expose follower count/views consistently.
+- FastAPI background tasks are used for the demo; production should use a durable queue.
+- Raw audio is temporary and deleted after transcription.
+- Instagram metadata can be incomplete even when likes, comments, or captions are available.
+- Engagement-rate comparison is incomplete when a video's view count is unavailable.
+- The current retry behavior is intentionally minimal. Failed ingestion should be started again with a new session.
+- The current router is rules-first for determinism. It may need an LLM classifier if future evals show that rules miss important phrasing.
+
+## Future production improvements
+
+- Move ingestion from FastAPI background tasks to a durable queue.
+- Add explicit retry controls for failed videos and failed sessions.
+- Add user accounts and authorization.
+- Add provider health dashboards and alerting.
+- Add nightly real-provider evals for Groq, Qdrant Cloud, Neon, YouTube, and Instagram.
+- Add Alembic migrations once schema churn increases.
+- Add distributed rate limiting for multi-instance deployments.
+- Add reranking or hybrid search only after evals show a retrieval quality gap.
+- Add richer frontend evidence views for citations and transcript snippets.

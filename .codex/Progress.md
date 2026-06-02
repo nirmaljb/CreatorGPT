@@ -122,6 +122,8 @@ Phase 2 implementation.
 - Added `CORS_ORIGIN_REGEX` alongside exact `CORS_ORIGINS` and documented the hosted frontend/backend pairing with frontend `NEXT_PUBLIC_API_BASE`.
 - Normalized configured backend CORS origins by trimming trailing slashes so pasted hosted frontend URLs do not fail browser preflight checks.
 - Updated the frontend API base handling to trim trailing slashes from hosted backend URLs before calling `/config`, `/ingest`, `/status`, `/messages`, and `/chat`.
+- Reorganized `README.md` around the requested headings: project overview, features, architecture, tech stack, setup, environment variables, running locally, demo flow, API endpoints, RAG design, cost and scalability, known limitations, and future production improvements.
+- Kept the larger README architecture flow as Mermaid and changed the small demo flow to ASCII text.
 
 ## Current Next Step
 
@@ -239,3 +241,4 @@ Run `python scripts/eval_assignment_questions.py --session-id <id>` against a co
 - `docker build -f backend/Dockerfile -t creator-rag-backend:render-smoke .` passed after the final Dockerfile changes, including `ffmpeg`, Python dependencies, FastEmbed/Qdrant wheels, and the backend package copy.
 - `make ci` passed after the Render Docker/CORS updates; backend tests now report 78 selected tests plus 1 deselected smoke test, and the mocked smoke test passes separately.
 - `backend/.venv/bin/python -m pytest backend/tests/test_startup.py`, `make backend-lint`, `git diff --check`, and `make ci` passed after adding trailing-slash normalization for backend CORS origins.
+- `make markdown-lint` passed after reorganizing the README headings and diagram formats.
