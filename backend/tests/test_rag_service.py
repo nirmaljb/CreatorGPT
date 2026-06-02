@@ -57,7 +57,12 @@ class RagServiceTests(unittest.TestCase):
         self.assertEqual(len(raw_events), 1)
         error_payload = json.loads(raw_events[0].split("data: ", 1)[1])
         self.assertTrue(raw_events[0].startswith("event: error"))
-        self.assertEqual(error_payload["message"], "qdrant down")
+        self.assertEqual(
+            error_payload["message"],
+            "Transcript evidence could not be retrieved for this question. Try again shortly.",
+        )
+        self.assertEqual(error_payload["error"]["code"], "CHAT_RETRIEVAL_FAILED")
+        self.assertTrue(error_payload["error"]["retryable"])
         self.assertIsNone(error_payload["route"])
 
 

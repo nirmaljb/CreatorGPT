@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 
+from backend.app.core.app_errors import AppError, stale_ingest_error, stale_video_ingest_error
 from backend.app.core.config import get_settings
 from backend.app.store.database import db_session
 from backend.app.store.models import (
@@ -22,6 +23,14 @@ STALE_INGEST_MESSAGE = (
     "Ingestion stalled because the background worker stopped before completion. Start a new ingest session."
 )
 TRANSCRIPT_SOURCE_ORDER = ("captions", "whisper", "unavailable")
+
+
+def _structured_error_to_dict(error: AppError | dict | None) -> dict | None:
+    if error is None:
+        return None
+    if isinstance(error, AppError):
+        return error.to_dict()
+    return error
 
 
 def create_session(session_id: str) -> None:
@@ -69,6 +78,7 @@ def update_session_status(
     error_message: str | None = None,
     current_step: str | None = None,
     progress_percent: int | None = None,
+    error: AppError | dict | None = None,
 ) -> None:
     with db_session() as db:
         row = db.get(SessionModel, session_id)
@@ -77,6 +87,7 @@ def update_session_status(
             db.add(row)
         row.status = status
         row.error_message = error_message
+        row.error = _structured_error_to_dict(error)
         if current_step is not None:
             row.current_step = current_step
         if progress_percent is not None:
@@ -219,16 +230,20 @@ def fail_stale_processing_session(session_id: str, stale_after_seconds: int) -> 
         if row is None or not is_stale_processing_session(row.status, row.updated_at, stale_after_seconds):
             return False
 
+        session_error = stale_ingest_error()
         row.status = "failed"
-        row.error_message = STALE_INGEST_MESSAGE
+        row.error_message = session_error.message
+        row.error = session_error.to_dict()
         row.current_step = "Failed: ingestion stalled"
 
         videos = db.scalars(select(VideoMetadataModel).where(VideoMetadataModel.session_id == session_id)).all()
         for video in videos:
             if video.ingest_status in TERMINAL_VIDEO_STATUSES:
                 continue
+            video_error = stale_video_ingest_error(video.video_id)
             video.ingest_status = "failed"
-            video.video_error_message = STALE_INGEST_MESSAGE
+            video.video_error_message = video_error.message
+            video.video_error = video_error.to_dict()
             if not video.transcript_source:
                 video.transcript_source = "unavailable"
 
@@ -265,6 +280,7 @@ def update_video_ingest_status(
     transcript_source: str | None = None,
     chunk_count: int | None = None,
     transcript_cached: bool | None = None,
+    video_error: AppError | dict | None = None,
 ) -> None:
     with db_session() as db:
         row = db.scalar(
@@ -277,6 +293,7 @@ def update_video_ingest_status(
             return
         row.ingest_status = ingest_status
         row.video_error_message = error_message
+        row.video_error = _structured_error_to_dict(video_error)
         if transcript_source is not None:
             row.transcript_source = transcript_source
         if chunk_count is not None:
@@ -321,6 +338,7 @@ def _video_to_dict(row: VideoMetadataModel) -> dict:
         "engagement_rate_available": views_available and row.views > 0,
         "ingest_status": row.ingest_status,
         "video_error_message": row.video_error_message,
+        "video_error": row.video_error,
         "transcript_source": row.transcript_source,
         "chunk_count": row.chunk_count,
         "metadata_cached": row.metadata_cached,
@@ -379,6 +397,7 @@ def get_session(session_id: str) -> dict | None:
             "session_id": row.id,
             "status": row.status,
             "error_message": row.error_message,
+            "error": row.error,
             "current_step": row.current_step,
             "progress_percent": row.progress_percent,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,

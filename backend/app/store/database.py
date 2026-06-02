@@ -53,8 +53,14 @@ def db_session() -> Iterator[Session]:
 def init_db() -> None:
     Base.metadata.create_all(bind=get_engine())
     ensure_session_progress_columns()
+    ensure_session_error_columns()
     ensure_video_ingestion_columns()
     ensure_usage_ledger_columns()
+
+
+def ensure_session_error_columns() -> None:
+    with get_engine().begin() as conn:
+        conn.execute(text("alter table sessions add column if not exists error jsonb"))
 
 
 def ensure_session_progress_columns() -> None:
@@ -73,6 +79,7 @@ def ensure_video_ingestion_columns() -> None:
             )
         )
         conn.execute(text("alter table video_metadata add column if not exists video_error_message text"))
+        conn.execute(text("alter table video_metadata add column if not exists video_error jsonb"))
         conn.execute(
             text(
                 "alter table video_metadata "

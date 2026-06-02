@@ -2,6 +2,7 @@ import json
 import logging
 from collections.abc import Iterator
 
+from backend.app.core.app_errors import classify_chat_error
 from backend.app.core.config import get_settings
 from backend.app.rag.chat_client import ChatUsage, estimate_message_tokens, estimate_text_tokens, stream_chat_events
 from backend.app.rag.graph import run_retrieval_graph
@@ -21,6 +22,7 @@ def stream_rag_response(session_id: str, message: str) -> Iterator[str]:
     retrieval_policy = None
     usage: ChatUsage | None = None
     streamed_model: str | None = None
+    stage = "retrieval"
     try:
         state = run_retrieval_graph(session_id=session_id, query=message)
         resolved_message = state.get("resolved_query") or message
@@ -31,6 +33,7 @@ def stream_rag_response(session_id: str, message: str) -> Iterator[str]:
         chunks = state.get("chunks", [])
         history = state.get("history", [])
         sources = build_sources(metadata, chunks)
+        stage = "prompt"
         messages = build_chat_messages(
             resolved_message,
             metadata,
@@ -40,8 +43,10 @@ def stream_rag_response(session_id: str, message: str) -> Iterator[str]:
             route,
         )
 
+        stage = "persistence"
         append_chat_message(session_id=session_id, role="user", content=message)
 
+        stage = "provider"
         yield _sse("sources", {"sources": sources, "route": route, "retrieval_policy": retrieval_policy})
         for event in stream_chat_events(messages):
             streamed_model = event.model or streamed_model
@@ -51,6 +56,7 @@ def stream_rag_response(session_id: str, message: str) -> Iterator[str]:
             if event.token:
                 full_response += event.token
                 yield _sse("token", {"token": event.token})
+        stage = "persistence"
         append_chat_message(
             session_id=session_id,
             role="assistant",
@@ -67,5 +73,14 @@ def stream_rag_response(session_id: str, message: str) -> Iterator[str]:
         )
         yield _sse("done", {"ok": True, "route": route, "retrieval_policy": retrieval_policy})
     except Exception as exc:
+        error = classify_chat_error(exc, stage=stage)
         logger.exception("Chat stream failed session_id=%s route=%s", session_id, route or "unavailable")
-        yield _sse("error", {"message": str(exc), "route": route, "retrieval_policy": retrieval_policy})
+        yield _sse(
+            "error",
+            {
+                "error": error.to_dict(),
+                "message": error.message,
+                "route": route,
+                "retrieval_policy": retrieval_policy,
+            },
+        )

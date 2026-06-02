@@ -133,6 +133,7 @@ def normalize_metadata(
         "raw_metadata": info,
         "ingest_status": "metadata_ready",
         "video_error_message": None,
+        "video_error": None,
         "transcript_source": "unavailable",
         "chunk_count": 0,
         "metadata_cached": False,

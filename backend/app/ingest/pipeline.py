@@ -5,6 +5,13 @@ from pathlib import Path
 
 from yt_dlp.utils import DownloadError
 
+from backend.app.core.app_errors import (
+    AppError,
+    PipelineAppException,
+    classify_ingest_error,
+    classify_session_ingest_error,
+    session_error_from_video_error,
+)
 from backend.app.core.config import get_settings
 from backend.app.ingest.cache import (
     extraction_cache_key,
@@ -210,6 +217,7 @@ async def process_video_transcript(
     usage_recorded = False
     transcript_cached = False
     transcript_source = "unavailable"
+    stage = "transcript"
 
     logger.info(
         "Transcript/vector pass for Video %s session_id=%s platform=%s url=%s",
@@ -260,6 +268,7 @@ async def process_video_transcript(
             len(chunks),
         )
 
+        stage = "vector"
         await progress.set_video(video_id, f"Embedding chunks for Video {video_id}", 85)
         upserted = await asyncio.to_thread(upsert_chunks, chunks)
         await asyncio.to_thread(
@@ -296,6 +305,7 @@ async def process_video_transcript(
         )
         return audio_path
     except Exception as exc:
+        video_error = classify_ingest_error(exc, stage=stage, platform=metadata["platform"], video_id=video_id)
         logger.exception(
             "Transcript/vector pass failed for Video %s session_id=%s",
             video_id,
@@ -308,6 +318,7 @@ async def process_video_transcript(
             "failed",
             str(exc),
             "unavailable",
+            video_error=video_error,
         )
         if not usage_recorded:
             await asyncio.to_thread(
@@ -331,7 +342,7 @@ async def process_video_transcript(
                     audio_path,
                     metadata["session_id"],
                 )
-        raise
+        raise PipelineAppException(video_error, exc) from exc
 
 
 async def ingest_session_async(session_id: str, videos: list[dict]) -> None:
@@ -351,7 +362,7 @@ async def ingest_session_async(session_id: str, videos: list[dict]) -> None:
 
         metadata_by_video: dict[str, dict] = {}
         cache_by_video: dict[str, dict | None] = {}
-        metadata_errors: list[str] = []
+        metadata_errors: list[AppError] = []
         for index, video in enumerate(videos):
             video_id = video["video_id"]
             url = video["url"]
@@ -393,6 +404,7 @@ async def ingest_session_async(session_id: str, videos: list[dict]) -> None:
                     bool(metadata.get("raw_metadata")),
                 )
             except Exception as exc:
+                video_error = classify_ingest_error(exc, stage="metadata", platform=platform, video_id=video_id)
                 logger.exception("Metadata extraction failed for Video %s session_id=%s", video_id, session_id)
                 await asyncio.to_thread(
                     upsert_video_metadata,
@@ -403,6 +415,7 @@ async def ingest_session_async(session_id: str, videos: list[dict]) -> None:
                         url=url,
                         cache_key=cache_key,
                         error_message=str(exc),
+                        video_error=video_error.to_dict(),
                     ),
                 )
                 await asyncio.to_thread(
@@ -416,10 +429,24 @@ async def ingest_session_async(session_id: str, videos: list[dict]) -> None:
                     1,
                     get_settings().embedding_model,
                 )
-                metadata_errors.append(f"Video {video_id}: {exc}")
+                metadata_errors.append(video_error)
 
         if metadata_errors:
-            raise RuntimeError("; ".join(metadata_errors))
+            session_error = session_error_from_video_error(metadata_errors[0])
+            logger.error(
+                "Metadata pass failed session_id=%s error_codes=%s",
+                session_id,
+                [error.code for error in metadata_errors],
+            )
+            await asyncio.to_thread(
+                update_session_status,
+                session_id,
+                "failed",
+                session_error.message,
+                "Failed during metadata extraction",
+                error=session_error,
+            )
+            return
 
         await asyncio.to_thread(update_session_progress, session_id, "Metadata ready for both videos", 25)
         logger.info("Metadata pass complete session_id=%s videos=%s", session_id, sorted(metadata_by_video))
@@ -451,22 +478,27 @@ async def ingest_session_async(session_id: str, videos: list[dict]) -> None:
         await asyncio.to_thread(update_session_status, session_id, "completed", None, "Completed", 100)
         logger.info("Ingestion completed session_id=%s elapsed=%.2fs", session_id, time.monotonic() - started_at)
     except DownloadError as exc:
+        video_error = classify_ingest_error(exc, stage="download")
+        session_error = session_error_from_video_error(video_error)
         logger.exception("Video download/extraction failed session_id=%s", session_id)
         await asyncio.to_thread(
             update_session_status,
             session_id,
             "failed",
-            f"Video download/extraction failed: {exc}",
+            session_error.message,
             "Failed during video download or extraction",
+            error=session_error,
         )
     except Exception as exc:
+        session_error = classify_session_ingest_error(exc)
         logger.exception("Ingestion failed session_id=%s", session_id)
         await asyncio.to_thread(
             update_session_status,
             session_id,
             "failed",
-            f"Ingestion failed: {exc}",
+            session_error.message,
             "Failed during ingestion",
+            error=session_error,
         )
     finally:
         for audio_path in audio_paths:

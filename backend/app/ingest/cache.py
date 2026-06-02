@@ -9,6 +9,7 @@ SESSION_METADATA_KEYS = {
     "video_id",
     "ingest_status",
     "video_error_message",
+    "video_error",
     "chunk_count",
     "cache_key",
     "metadata_cached",
@@ -63,6 +64,7 @@ def metadata_from_cache(
             "raw_metadata": raw_metadata,
             "ingest_status": "metadata_ready",
             "video_error_message": None,
+            "video_error": None,
             "transcript_source": transcript_source,
             "chunk_count": 0,
             "cache_key": cache_key,
@@ -80,6 +82,7 @@ def failed_video_metadata(
     url: str,
     cache_key: str,
     error_message: str,
+    video_error: dict | None = None,
 ) -> dict:
     return {
         "session_id": session_id,
@@ -98,6 +101,7 @@ def failed_video_metadata(
         "raw_metadata": None,
         "ingest_status": "failed",
         "video_error_message": error_message,
+        "video_error": video_error,
         "transcript_source": "unavailable",
         "chunk_count": 0,
         "cache_key": cache_key,

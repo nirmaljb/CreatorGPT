@@ -47,6 +47,8 @@ def test_ingest_rejects_when_concurrent_limit_is_full(monkeypatch) -> None:
 
     assert response.status_code == 429
     assert "Too many ingestions" in response.json()["detail"]
+    assert response.json()["error"]["code"] == "INGEST_BUSY"
+    assert response.json()["error"]["retryable"]
 
 
 def test_ingest_rejects_sessions_over_ip_hourly_limit(monkeypatch) -> None:
@@ -76,5 +78,7 @@ def test_ingest_rejects_sessions_over_ip_hourly_limit(monkeypatch) -> None:
     assert second.status_code == 429
     assert second.headers["Retry-After"]
     assert "Session rate limit" in second.json()["detail"]
+    assert second.json()["error"]["code"] == "INGEST_RATE_LIMITED"
+    assert second.json()["error"]["retry_after_seconds"] == int(second.headers["Retry-After"])
     assert len(created_sessions) == 1
     assert len(background_calls) == 1

@@ -77,6 +77,17 @@ h1 {
   color: var(--accent-strong);
 }
 
+.status.submitting,
+.status.chatting {
+  background: var(--soft-blue);
+  color: #24538a;
+}
+
+.status.offline {
+  background: #fff8e8;
+  color: #7b4a00;
+}
+
 .progress-summary {
   display: grid;
   gap: 6px;
@@ -138,6 +149,12 @@ select {
   width: 100%;
 }
 
+input:disabled,
+select:disabled {
+  background: #f1f3f6;
+  color: var(--muted);
+}
+
 input:focus,
 select:focus {
   border-color: var(--accent);
@@ -163,8 +180,25 @@ button:disabled {
 .session {
   color: var(--muted);
   font-size: 13px;
-  margin: 8px 0 16px;
+  margin: 0;
   overflow-wrap: anywhere;
+}
+
+.session-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  margin: 8px 0 16px;
+}
+
+.secondary-action {
+  background: #eef1f5;
+  border: 1px solid var(--line);
+  color: #384250;
+  min-height: 34px;
+  padding: 0 12px;
 }
 
 .limit-strip {
@@ -189,6 +223,28 @@ button:disabled {
   border-radius: 8px;
   margin: 10px 0 16px;
   padding: 10px 12px;
+}
+
+.warning-stack {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+
+.warning {
+  background: #fff8e8;
+  border: 1px solid #f2d38a;
+  border-radius: 8px;
+  color: #7b4a00;
+  font-size: 13px;
+  margin: 0;
+  padding: 9px 10px;
+}
+
+.field-error {
+  color: var(--warn);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .network-alert {

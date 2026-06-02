@@ -156,6 +156,19 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Transcript source is recorded as `captions`, `whisper`, or `unavailable` in Postgres and chunk payloads.
 - Extraction cache is stored in Postgres by platform, URL, cache version, and `MAX_VIDEO_SECONDS` so repeated demos reuse real extractor output. Cache version `extract-v3` avoids reusing older capped-caption or local-Whisper entries. `FORCE_REFRESH=true` bypasses cache reads and forces fresh extraction.
 - Ingestion must fail visibly for real extractor/download/transcription errors; do not silently fall back to fake metadata, fake transcripts, or fabricated chunks.
+- URL/platform validation now runs in the frontend and backend before ingestion starts. Backend validation happens before session creation, ingest slot acquisition, or per-IP rate-limit accounting.
+- YouTube validation accepts `youtube.com/watch?v=...`, `youtube.com/shorts/...`, and `youtu.be/...` forms with query strings. Instagram validation accepts only `instagram.com/reel/...` forms.
+- Both video slots may use the same platform. Duplicate URLs warn in the frontend but do not block submission.
+- App-owned API failures can use a structured top-level `error` envelope with `code`, `message`, `scope`, `retryable`, and optional `video_id`, `field`, or retry timing. Legacy `detail` strings remain in responses where practical for compatibility.
+- Session and video metadata rows persist structured error JSON alongside existing `error_message` and `video_error_message` string fields.
+- User-facing structured errors are sanitized. Raw provider exception text stays in backend logs and legacy string fields for debugging, not in the primary frontend rendering path.
+- Whole-session retry creates a new ingest session from the current validated inputs. It does not resume, patch, force-refresh, or cancel the failed session.
+- Completed-session results remain visible while inputs are edited. The frontend marks edited inputs as a pending new comparison while chat remains tied to the completed session until a new ingest is accepted.
+- The frontend tracks operation phases for idle, submitting, processing, completed, failed, offline, and chatting states, and ignores stale responses from older status, ingest, reset, or chat operations.
+- Reset during processing is a local browser reset only. It does not claim backend cancellation and warns that backend work may continue.
+- Status polling warns about offline/slow connections and about 60 seconds without backend status movement, but the backend status endpoint remains the source of truth for terminal failure.
+- Backpressure and rate-limit responses use structured retryable errors. Retry countdowns appear only when the backend provides retry timing.
+- Chat SSE `error` events use the same structured error shape and the frontend replaces empty assistant drafts with a friendly failure message.
 
 ## Source Citation Format
 

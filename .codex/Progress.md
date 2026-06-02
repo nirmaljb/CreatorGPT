@@ -126,10 +126,12 @@ Phase 2 implementation.
 - Kept the larger README architecture flow as Mermaid and changed the small demo flow to ASCII text.
 - Moved detailed setup, environment variable, local run, Docker, Render deployment, and check commands from `README.md` into `docs/installation.md`; the README now links to the installation guide while preserving the requested headings.
 - Added phase-development links near the top of `README.md`, linked the Phase 1 ingestion/status/chat pipeline diagrams from the README architecture section, and added a Mermaid RAG flow directly under the README RAG design heading.
+- Added `issues/prd.md` for the cross-phase frontend error-handling and retry work after the design interview locked URL validation, structured errors, whole-session retry, state guards, stalled warnings, and no fake cancellation.
+- Broke the error-handling PRD into nine local vertical-slice issue files under `issues/`, ordered from URL validation through structured errors, ingestion failures, retry, state guards, polling, rate-limit UX, chat stream errors, and final docs/verification.
 
 ## Current Next Step
 
-Run `python scripts/eval_assignment_questions.py --session-id <id>` against a completed YouTube + Instagram session when the local backend and Qdrant Cloud are reachable before making further retrieval, chunking, embedding, or routing optimizations.
+Start implementation with `issues/001-validate-video-urls-before-ingest.md`.
 
 ## Known Issues
 
@@ -246,3 +248,6 @@ Run `python scripts/eval_assignment_questions.py --session-id <id>` against a co
 - `make markdown-lint` passed after reorganizing the README headings and diagram formats.
 - `make markdown-lint` passed after moving setup details into `docs/installation.md`.
 - `make markdown-lint` passed after adding README phase links, architecture pipeline links, and the RAG design Mermaid diagram.
+- `frontend/node_modules/.bin/markdownlint-cli2 issues/prd.md` and `git diff --check` passed after adding the error-handling PRD.
+- `make markdown-lint` failed after adding the PRD because untracked skill markdown files under `.codex/skills/` have pre-existing markdownlint errors; the new PRD itself passes markdown lint.
+- `frontend/node_modules/.bin/markdownlint-cli2 issues/*.md` and `git diff --check` passed after creating the local issue files.

@@ -2,11 +2,19 @@ import inspect
 import logging
 import uuid
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from backend.app.api.schemas import ChatRequest, IngestRequest, IngestResponse
+from backend.app.core.app_errors import (
+    AppErrorHTTPException,
+    busy_error,
+    error_response_payload,
+    rate_limit_error,
+    session_not_found_error,
+    session_not_ready_error,
+)
 from backend.app.core.backpressure import (
     active_ingestions,
     check_session_rate_limit,
@@ -16,6 +24,7 @@ from backend.app.core.backpressure import (
 )
 from backend.app.core.config import get_settings
 from backend.app.core.logging import configure_logging
+from backend.app.core.url_validation import validate_ingest_videos
 from backend.app.ingest.pipeline import ingest_session
 from backend.app.rag.service import stream_rag_response
 from backend.app.store import database
@@ -36,6 +45,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(AppErrorHTTPException)
+def app_error_exception_handler(_: Request, exc: AppErrorHTTPException) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error_response_payload(exc.error),
+        headers=exc.headers,
+    )
 
 
 @app.on_event("startup")
@@ -108,17 +126,13 @@ def config() -> dict:
 
 @app.post("/ingest", response_model=IngestResponse)
 def ingest(payload: IngestRequest, background_tasks: BackgroundTasks, request: Request) -> IngestResponse:
-    session_id = str(uuid.uuid4())
-    videos = [video.model_dump() for video in payload.normalized_videos()]
+    videos, validation = validate_ingest_videos([video.model_dump() for video in payload.normalized_videos()])
+    if validation is not None:
+        raise AppErrorHTTPException(status_code=422, error=validation)
+
     client_ip = client_ip_from_request(request)
     if not try_acquire_ingest_slot(settings.max_concurrent_ingestions):
-        raise HTTPException(
-            status_code=429,
-            detail=(
-                "Too many ingestions are already running. "
-                f"Limit: {settings.max_concurrent_ingestions} concurrent ingestion(s)."
-            ),
-        )
+        raise AppErrorHTTPException(status_code=429, error=busy_error(settings.max_concurrent_ingestions))
 
     rate_allowed, retry_after_seconds, attempts = check_session_rate_limit(
         client_ip,
@@ -126,15 +140,13 @@ def ingest(payload: IngestRequest, background_tasks: BackgroundTasks, request: R
     )
     if not rate_allowed:
         release_ingest_slot()
-        raise HTTPException(
+        raise AppErrorHTTPException(
             status_code=429,
-            detail=(
-                "Session rate limit reached for this IP. "
-                f"Limit: {settings.max_sessions_per_ip_per_hour} session(s) per hour."
-            ),
+            error=rate_limit_error(settings.max_sessions_per_ip_per_hour, retry_after_seconds),
             headers={"Retry-After": str(retry_after_seconds)},
         )
 
+    session_id = str(uuid.uuid4())
     logger.info(
         "Accepted ingest request session_id=%s client_ip=%s attempts_in_last_hour=%s videos=%s",
         session_id,
@@ -159,12 +171,12 @@ def ingest(payload: IngestRequest, background_tasks: BackgroundTasks, request: R
 def status(session_id: str) -> dict:
     row = get_session(session_id)
     if row is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise AppErrorHTTPException(status_code=404, error=session_not_found_error())
     if row["status"] == "processing":
         fail_stale_processing_session(session_id, settings.ingest_stale_seconds)
         row = get_session(session_id)
         if row is None:
-            raise HTTPException(status_code=404, detail="Session not found")
+            raise AppErrorHTTPException(status_code=404, error=session_not_found_error())
     logger.info(
         "Status response session_id=%s status=%s step=%s progress=%s metadata_count=%s",
         session_id,
@@ -179,7 +191,7 @@ def status(session_id: str) -> dict:
 @app.get("/messages/{session_id}")
 def messages(session_id: str) -> dict:
     if get_session(session_id) is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise AppErrorHTTPException(status_code=404, error=session_not_found_error())
     return {"messages": get_chat_messages(session_id, limit=settings.max_chat_history_messages)}
 
 
@@ -187,9 +199,9 @@ def messages(session_id: str) -> dict:
 def chat(payload: ChatRequest) -> StreamingResponse:
     row = get_session(payload.session_id)
     if row is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise AppErrorHTTPException(status_code=404, error=session_not_found_error())
     if row["status"] not in {"ready", "completed"}:
-        raise HTTPException(status_code=409, detail=f"Session is {row['status']}, not completed")
+        raise AppErrorHTTPException(status_code=409, error=session_not_ready_error(row["status"]))
     return StreamingResponse(
         stream_rag_response(payload.session_id, payload.message),
         media_type="text/event-stream",
