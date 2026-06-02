@@ -23,7 +23,12 @@ class Settings(BaseSettings):
     embedding_model: str = Field(default="BAAI/bge-small-en-v1.5", alias="EMBEDDING_MODEL")
     embedding_dimensions: int = Field(default=384, alias="EMBEDDING_DIMENSIONS")
 
-    max_video_seconds: int = Field(default=600, alias="MAX_VIDEO_SECONDS")
+    max_video_seconds: int = Field(default=600, alias="MAX_VIDEO_SECONDS", ge=1)
+    max_concurrent_ingestions: int = Field(default=2, alias="MAX_CONCURRENT_INGESTIONS", ge=1)
+    max_chunks_per_video: int = Field(default=120, alias="MAX_CHUNKS_PER_VIDEO", ge=1)
+    max_chat_history_messages: int = Field(default=12, alias="MAX_CHAT_HISTORY_MESSAGES", ge=0)
+    max_retrieved_chunks: int = Field(default=8, alias="MAX_RETRIEVED_CHUNKS", ge=1)
+    max_sessions_per_ip_per_hour: int = Field(default=20, alias="MAX_SESSIONS_PER_IP_PER_HOUR", ge=1)
     ingest_stale_seconds: int = Field(default=900, alias="INGEST_STALE_SECONDS")
     tmp_dir: str = Field(default="/private/tmp/creator-rag", alias="TMP_DIR")
     force_refresh: bool = Field(default=False, alias="FORCE_REFRESH")

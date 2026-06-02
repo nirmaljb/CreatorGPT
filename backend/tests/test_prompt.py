@@ -1,4 +1,6 @@
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from backend.app.rag.prompt import build_chat_messages
 
@@ -149,6 +151,28 @@ class PromptTests(unittest.TestCase):
 
         self.assertIn("Video A chunks for evidence of what worked", user_message)
         self.assertIn("Video B chunks for improvement opportunities", user_message)
+
+    def test_history_messages_respect_configured_limit(self) -> None:
+        with patch("backend.app.rag.prompt.get_settings", return_value=SimpleNamespace(max_chat_history_messages=2)):
+            messages = build_chat_messages(
+                query="Follow up",
+                metadata=[],
+                metadata_tool_results=[],
+                chunks=[],
+                history=[
+                    {"role": "user", "content": "Old user message"},
+                    {"role": "assistant", "content": "Old assistant message"},
+                    {"role": "user", "content": "Recent user message"},
+                    {"role": "assistant", "content": "Recent assistant message"},
+                ],
+                route="TRANSCRIPT_ONLY",
+            )
+
+        contents = [message["content"] for message in messages]
+        self.assertNotIn("Old user message", contents)
+        self.assertNotIn("Old assistant message", contents)
+        self.assertIn("Recent user message", contents)
+        self.assertIn("Recent assistant message", contents)
 
 
 if __name__ == "__main__":

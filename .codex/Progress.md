@@ -110,6 +110,13 @@ Phase 2 implementation.
 - Wired chat streaming to record provider-reported prompt/completion tokens when available and deterministic token estimates when stream usage is unavailable.
 - Fixed stuck frontend status polling by adding a timeout around `/status` fetches and rescheduling polling after transient status failures while the browser remains online.
 - Changed `GET /status/{session_id}` to load the session and video metadata in one Postgres session, and added status response logs with status, step, progress, and metadata count.
+- Added runtime backpressure settings for concurrent ingests, per-IP hourly sessions, per-video chunk count, chat history messages, retrieved chunks, and Whisper/audio seconds.
+- Added process-local ingest slot tracking and per-IP hourly session limiting so overloaded `POST /ingest` requests return `429` instead of silently queuing.
+- Added `GET /config` so the frontend can render the same runtime limits the backend enforces.
+- Capped transcript chunks before embedding/Qdrant upsert with `MAX_CHUNKS_PER_VIDEO`.
+- Capped chat history loading and prompt history with `MAX_CHAT_HISTORY_MESSAGES`.
+- Capped Qdrant retrieval with `MAX_RETRIEVED_CHUNKS` while preserving separate A/B retrieval for comparison routes.
+- Updated the frontend to fetch runtime limits, show them as compact chips, use the retrieved-chunk cap for source display, and render backend `429` details cleanly.
 
 ## Current Next Step
 
@@ -218,3 +225,8 @@ Run `python scripts/eval_assignment_questions.py --session-id <id>` against a co
 - `curl -sS --max-time 5 http://127.0.0.1:8000/status/58e0d15d-eeb1-4388-a27d-53f7517a8540` returned `completed`, progress `100`, and both metadata rows after investigating the stuck frontend report.
 - `backend/.venv/bin/python -m pytest backend/tests/test_postgres_session.py backend/tests/test_status_endpoint.py`, `make frontend-typecheck`, and `make frontend-lint` passed after the status polling fix.
 - `make ci` passed after the status polling fix; backend tests now report 70 selected tests plus 1 deselected smoke test.
+- `backend/.venv/bin/python -m pytest backend/tests/test_backpressure.py backend/tests/test_ingest_backpressure.py backend/tests/test_rag_graph.py backend/tests/test_prompt.py` passed after adding backpressure limits.
+- `npm run typecheck` passed after adding frontend runtime-limit display.
+- `make backend-lint`, `make backend-tests`, `make frontend-lint`, `make frontend-typecheck`, `make frontend-build`, `make markdown-lint`, and `git diff --check` passed after adding backpressure limits.
+- `backend/.venv/bin/python -m pytest backend/tests/test_rag_graph.py` passed after tightening the lowered retrieval-limit path.
+- `make ci` passed after the final backpressure changes; backend tests now report 76 selected tests plus 1 deselected smoke test, and the mocked smoke test passes separately.

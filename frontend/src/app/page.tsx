@@ -61,10 +61,27 @@ type StatusResponse = {
   metadata: VideoMetadata[];
 };
 
+type RuntimeLimits = {
+  max_video_seconds: number;
+  max_concurrent_ingestions: number;
+  max_chunks_per_video: number;
+  max_chat_history_messages: number;
+  max_retrieved_chunks: number;
+  max_sessions_per_ip_per_hour: number;
+};
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 const STATUS_REQUEST_TIMEOUT_MS = 7000;
 const NETWORK_MESSAGE =
   "Connection is unavailable or slow. Status polling will keep retrying when the browser is online.";
+const DEFAULT_RUNTIME_LIMITS: RuntimeLimits = {
+  max_video_seconds: 600,
+  max_concurrent_ingestions: 2,
+  max_chunks_per_video: 120,
+  max_chat_history_messages: 12,
+  max_retrieved_chunks: 8,
+  max_sessions_per_ip_per_hour: 20
+};
 
 function toErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
@@ -103,6 +120,25 @@ function formatDuration(seconds: number) {
   const minutes = Math.floor(total / 60);
   const secs = total % 60;
   return `${minutes}:${secs.toString().padStart(2, "0")}`;
+}
+
+async function responseErrorMessage(response: Response) {
+  const text = await response.text();
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed.detail === "string") return parsed.detail;
+    if (parsed.detail) return JSON.stringify(parsed.detail);
+  } catch {
+    return text || `Request failed: ${response.status}`;
+  }
+  return text || `Request failed: ${response.status}`;
+}
+
+function formatLimitSeconds(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  if (remainder === 0) return `${minutes} min`;
+  return `${minutes}m ${remainder}s`;
 }
 
 function VideoCard({ video }: { video?: VideoMetadata }) {
@@ -177,12 +213,14 @@ export default function Home() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [networkMessage, setNetworkMessage] = useState<string | null>(null);
+  const [limits, setLimits] = useState<RuntimeLimits>(DEFAULT_RUNTIME_LIMITS);
 
   const videoA = useMemo(() => metadata.find((item) => item.video_id === "A"), [metadata]);
   const videoB = useMemo(() => metadata.find((item) => item.video_id === "B"), [metadata]);
   const isReady = status === "ready" || status === "completed";
   const canIngest = videoInputs.every((video) => video.url.trim().length > 0) && status !== "processing" && isOnline;
   const canChat = isReady && !isStreaming && isOnline;
+  const sourceDisplayLimit = limits.max_retrieved_chunks;
 
   function updateVideoInput(videoId: "A" | "B", patch: Partial<VideoInputState>) {
     setVideoInputs((current) =>
@@ -234,9 +272,23 @@ export default function Home() {
     );
   }, []);
 
+  const loadRuntimeConfig = useCallback(async () => {
+    const response = await fetch(`${API_BASE}/config`, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Config request failed: ${response.status}`);
+    }
+    const data = await response.json();
+    if (data.limits) {
+      setLimits({ ...DEFAULT_RUNTIME_LIMITS, ...data.limits });
+    }
+  }, []);
+
   useEffect(() => {
     window.localStorage.removeItem("creator_session_id");
     setIsOnline(window.navigator.onLine);
+    loadRuntimeConfig().catch((exc) => {
+      console.warn("Runtime config request failed; using frontend fallback limits", exc);
+    });
 
     function handleOffline() {
       console.warn("Browser reported offline; status polling paused");
@@ -256,7 +308,7 @@ export default function Home() {
       window.removeEventListener("offline", handleOffline);
       window.removeEventListener("online", handleOnline);
     };
-  }, []);
+  }, [loadRuntimeConfig]);
 
   useEffect(() => {
     if (!sessionId || !isOnline) return;
@@ -335,7 +387,7 @@ export default function Home() {
       });
       if (!response.ok) {
         setStatus("idle");
-        setError(await response.text());
+        setError(await responseErrorMessage(response));
         return;
       }
       const data = await response.json();
@@ -375,7 +427,7 @@ export default function Home() {
         body: JSON.stringify({ session_id: sessionId, message: question })
       });
       if (!response.ok || !response.body) {
-        throw new Error(await response.text());
+        throw new Error(await responseErrorMessage(response));
       }
 
       const reader = response.body.getReader();
@@ -471,6 +523,15 @@ export default function Home() {
         </button>
       </form>
 
+      <section className="limit-strip" aria-label="Runtime limits">
+        <span>Whisper cap {formatLimitSeconds(limits.max_video_seconds)}</span>
+        <span>{limits.max_concurrent_ingestions} concurrent ingest</span>
+        <span>{limits.max_chunks_per_video} chunks/video</span>
+        <span>{limits.max_chat_history_messages} history messages</span>
+        <span>{limits.max_retrieved_chunks} retrieved chunks</span>
+        <span>{limits.max_sessions_per_ip_per_hour} sessions/IP/hour</span>
+      </section>
+
       {sessionId && <p className="session">Session: {sessionId}</p>}
       {networkMessage && <p className="network-alert">{networkMessage}</p>}
       {error && <p className="error">{error}</p>}
@@ -494,7 +555,7 @@ export default function Home() {
                 <p>{message.content || (message.role === "assistant" ? "Streaming..." : "")}</p>
                 {message.sources?.length > 0 && (
                   <div className="sources">
-                    {message.sources.slice(0, 10).map((source) => (
+                    {message.sources.slice(0, sourceDisplayLimit).map((source) => (
                       <span key={`${message.id}-${source.source_tag}`}>{source.source_tag}</span>
                     ))}
                   </div>

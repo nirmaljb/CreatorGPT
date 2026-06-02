@@ -167,6 +167,22 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+.limit-strip {
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 6px;
+  margin: 4px 0 12px;
+}
+
+.limit-strip span {
+  background: #eef1f5;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 8px;
+}
+
 .error {
   background: #fff2ed;
   border: 1px solid #ffd8c8;

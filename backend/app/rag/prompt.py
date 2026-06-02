@@ -1,3 +1,4 @@
+from backend.app.core.config import get_settings
 from backend.app.ingest.chunker import format_timestamp
 
 
@@ -108,8 +109,11 @@ def _chunks_block(chunks: list[dict]) -> str:
 
 
 def _history_messages(history: list[dict]) -> list[dict]:
+    limit = get_settings().max_chat_history_messages
+    if limit <= 0:
+        return []
     messages = []
-    for item in history[-10:]:
+    for item in history[-limit:]:
         if item["role"] not in {"user", "assistant"}:
             continue
         messages.append({"role": item["role"], "content": item["content"]})

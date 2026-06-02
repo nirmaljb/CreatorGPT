@@ -240,6 +240,17 @@ async def process_video_transcript(
 
         await progress.set_video(video_id, f"Chunking transcript for Video {video_id}", 70)
         chunks = chunk_transcript(words, metadata)
+        max_chunks = get_settings().max_chunks_per_video
+        original_chunk_count = len(chunks)
+        if original_chunk_count > max_chunks:
+            chunks = chunks[:max_chunks]
+            logger.warning(
+                "Applied chunk backpressure session_id=%s video_id=%s original_chunk_count=%s max_chunks_per_video=%s",
+                metadata["session_id"],
+                video_id,
+                original_chunk_count,
+                max_chunks,
+            )
         logger.info(
             "Chunked transcript for Video %s session_id=%s transcript_source=%s word_count=%s chunk_count=%s",
             video_id,

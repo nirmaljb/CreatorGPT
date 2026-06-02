@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from backend.app.rag.graph import (
@@ -178,6 +179,24 @@ class RagGraphRoutingTests(unittest.TestCase):
         self.assertEqual(state["retrieval_policy"], METADATA_AUGMENTED_RETRIEVAL)
         self.assertIn("strong evidence", state["chunks"][0]["query"])
         self.assertIn("improvement opportunity", state["chunks"][1]["query"])
+
+    def test_retrieval_respects_lower_max_retrieved_chunks(self) -> None:
+        with (
+            patch("backend.app.rag.graph.get_settings", return_value=SimpleNamespace(max_retrieved_chunks=2)),
+            patch("backend.app.rag.graph.retrieve") as mocked_retrieve,
+        ):
+            mocked_retrieve.side_effect = lambda **kwargs: [kwargs]
+            state = retrieve_chunks(
+                {
+                    "session_id": "session-1",
+                    "query": "Why did Video A get more engagement than Video B?",
+                    "route": MIXED_COMPARISON,
+                }
+            )
+
+        self.assertEqual([chunk["video_id"] for chunk in state["chunks"]], ["A", "B"])
+        self.assertEqual([chunk["top_k"] for chunk in state["chunks"]], [1, 1])
+        self.assertEqual(len(state["chunks"]), 2)
 
     def test_metadata_tool_selection_uses_postgres_tools(self) -> None:
         with (

@@ -15,6 +15,7 @@ Included in this phase:
 - Add citation validation for metadata and transcript claims.
 - Expose chat route traces in SSE so evals can verify the selected path.
 - Add a simple internal per-session usage ledger for ingest and chat cost signals.
+- Add runtime backpressure limits for ingest concurrency, per-IP sessions, transcript chunks, chat history, retrieved chunks, and Whisper seconds.
 - Add an eval script for the assignment's required question set.
 
 Out of scope for this phase:
@@ -73,7 +74,22 @@ Phase 2 uses explicit retrieval policies instead of a single global `top_k` sear
 - `comparison_retrieval`: retrieves `top_k=4` from Video A and `top_k=4` from Video B, then merges the context.
 - `metadata_augmented_retrieval`: combines typed Postgres metadata tools with balanced transcript chunks for engagement explanations and recommendations.
 
-Comparison questions must not use one global `top_k=8` Qdrant search because that can return mostly one video. Balanced A/B retrieval is intentionally more deterministic for the assignment questions.
+Comparison questions must not use one global `top_k=8` Qdrant search because that can return mostly one video. Balanced A/B retrieval is intentionally more deterministic for the assignment questions. `MAX_RETRIEVED_CHUNKS` caps the final transcript context, while comparison routes still retrieve from Video A and Video B separately before merging.
+
+## Backpressure Limits
+
+Phase 2 now exposes and enforces these runtime limits:
+
+| Variable | Default | Enforcement Point |
+| --- | --- | --- |
+| `MAX_VIDEO_SECONDS` | `600` | Audio download and Groq Whisper fallback window |
+| `MAX_CONCURRENT_INGESTIONS` | `2` | `POST /ingest` returns `429` when all process-local slots are active |
+| `MAX_CHUNKS_PER_VIDEO` | `120` | Transcript chunks are truncated before embedding and Qdrant upsert |
+| `MAX_CHAT_HISTORY_MESSAGES` | `12` | Chat history loaded for prompts and frontend message reload |
+| `MAX_RETRIEVED_CHUNKS` | `8` | Transcript chunks passed into a chat answer |
+| `MAX_SESSIONS_PER_IP_PER_HOUR` | `20` | `POST /ingest` returns `429` with `Retry-After` when the hourly IP limit is reached |
+
+`GET /config` returns these values so the frontend renders the same limits the backend enforces.
 
 ## Current Program Flow
 
@@ -94,7 +110,8 @@ flowchart TD
     DoneMeta -- No --> C
     C -- Yes --> QD[Retrieve Qdrant chunks with named policy filters]
     C -- No --> Prompt
-    QD --> Prompt
+    QD --> Cap[Apply retrieved-chunk cap]
+    Cap --> Prompt
     Prompt --> Stream[Stream cited answer]
     Stream --> Ledger[Update session usage ledger]
 ```
@@ -112,3 +129,5 @@ This is not a user-facing analytics feature yet. It is a cost/debug signal for d
 - Improvement retrieval uses targeted Video A and Video B semantic queries instead of reranking. Reranking remains out of scope unless evals prove retrieval quality is the bottleneck.
 - Balanced comparison retrieval may include slightly less globally similar evidence, but it prevents one video from crowding out the other in A/B answers.
 - Chat token usage uses provider-reported stream usage when available. When a streaming provider does not return usage, the ledger stores a deterministic character-count estimate instead of leaving the field empty.
+- The current concurrency and per-IP session limits are in-process demo safeguards. They prevent obvious overload in the assignment app, but a production deployment should use a durable queue and shared rate limiter.
+- `MAX_CHUNKS_PER_VIDEO` can drop later transcript chunks from very long captioned videos. This is an intentional cost/latency tradeoff; hook and early-comparison questions remain covered.

@@ -166,6 +166,15 @@ def retrieve(
     top_k: int = 6,
 ) -> list[dict]:
     settings = get_settings()
+    requested_top_k = top_k
+    top_k = max(1, min(int(top_k), settings.max_retrieved_chunks))
+    if top_k != requested_top_k:
+        logger.warning(
+            "Applied vector retrieval backpressure requested_top_k=%s max_retrieved_chunks=%s effective_top_k=%s",
+            requested_top_k,
+            settings.max_retrieved_chunks,
+            top_k,
+        )
     ensure_collection()
     must = [qm.FieldCondition(key="session_id", match=qm.MatchValue(value=session_id))]
     if video_id:

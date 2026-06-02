@@ -56,6 +56,7 @@
 - Add citation validation.
 - Expose route and retrieval policy in chat SSE payloads so evals can assert the selected path directly.
 - Add a per-session internal usage ledger for transcript seconds, chunk/embedding counts, cache hits/misses, model names, and chat token usage.
+- Add runtime backpressure limits for ingest concurrency, per-IP sessions, per-video chunks, chat history, retrieved chunks, and Whisper/audio seconds.
 - Add an eval script for the assignment's expected question set before making further retrieval/chunking changes.
 
 ### Acceptance Criteria
@@ -68,6 +69,7 @@
 - Comparison and metadata-augmented routes retrieve `top_k=4` from Video A and `top_k=4` from Video B instead of one global `top_k=8` search.
 - Route-aware evals verify expected route, expected retrieval policy, citation shape, numeric values, unavailable metric behavior, vague/open-ended questions, creative synthesis, multi-step prompts, and incorrect-premise questions.
 - Usage ledger rows are created for each ingest session and updated after ingestion/chat without requiring real providers in CI.
+- Backpressure limits are enforced by backend tests and surfaced to the frontend through `GET /config`.
 - Follow-up questions resolve obvious video references without using a full query-rewrite pipeline.
 - Eval script passes the assignment's core questions.
 

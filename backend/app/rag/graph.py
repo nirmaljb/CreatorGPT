@@ -4,6 +4,7 @@ from typing import TypedDict
 
 from langgraph.graph import END, StateGraph
 
+from backend.app.core.config import get_settings
 from backend.app.rag.metadata_tools import (
     get_creator_info,
     get_engagement_comparison,
@@ -146,6 +147,30 @@ def _detect_video_ids(query: str) -> set[str]:
     return video_ids
 
 
+def _max_retrieved_chunks() -> int:
+    return max(1, get_settings().max_retrieved_chunks)
+
+
+def _single_video_top_k(default_top_k: int) -> int:
+    return max(1, min(default_top_k, _max_retrieved_chunks()))
+
+
+def _balanced_top_k_per_video(default_top_k: int = BALANCED_TOP_K_PER_VIDEO) -> int:
+    return max(1, min(default_top_k, max(1, _max_retrieved_chunks() // 2)))
+
+
+def _cap_retrieved_chunks(chunks: list[dict]) -> list[dict]:
+    max_chunks = _max_retrieved_chunks()
+    if len(chunks) <= max_chunks:
+        return chunks
+    logger.warning(
+        "Applied retrieval backpressure retrieved_count=%s max_retrieved_chunks=%s",
+        len(chunks),
+        max_chunks,
+    )
+    return chunks[:max_chunks]
+
+
 def _detect_hook_only(query: str) -> bool:
     lowered = query.lower()
     return any(term in lowered for term in HOOK_TERMS)
@@ -277,7 +302,7 @@ def resolve_follow_up(state: CreatorSessionState) -> CreatorSessionState:
 
 
 def load_history(state: CreatorSessionState) -> CreatorSessionState:
-    return {"history": get_chat_messages(state["session_id"], limit=12)}
+    return {"history": get_chat_messages(state["session_id"], limit=get_settings().max_chat_history_messages)}
 
 
 def retrieve_metadata(state: CreatorSessionState) -> CreatorSessionState:
@@ -355,75 +380,80 @@ def hook_retrieval(
     query: str,
     session_id: str,
     video_id: str | None = None,
-    top_k: int = BALANCED_TOP_K_PER_VIDEO,
+    top_k: int | None = None,
 ) -> list[dict]:
+    resolved_top_k = _single_video_top_k(top_k or BALANCED_TOP_K_PER_VIDEO)
     logger.info(
         "Applying retrieval policy=%s session_id=%s video_id=%s top_k=%s",
         HOOK_RETRIEVAL,
         session_id,
         video_id or "any",
-        top_k,
+        resolved_top_k,
     )
-    return retrieve(query=query, session_id=session_id, video_id=video_id, hook_only=True, top_k=top_k)
+    return retrieve(query=query, session_id=session_id, video_id=video_id, hook_only=True, top_k=resolved_top_k)
 
 
-def video_a_retrieval(query: str, session_id: str, top_k: int = BALANCED_TOP_K_PER_VIDEO) -> list[dict]:
+def video_a_retrieval(query: str, session_id: str, top_k: int | None = None) -> list[dict]:
+    resolved_top_k = _single_video_top_k(top_k or BALANCED_TOP_K_PER_VIDEO)
     logger.info(
         "Applying retrieval policy=%s session_id=%s top_k=%s",
         VIDEO_A_RETRIEVAL,
         session_id,
-        top_k,
+        resolved_top_k,
     )
-    return _retrieve_for_video(query, session_id, "A", False, top_k)
+    return _retrieve_for_video(query, session_id, "A", False, resolved_top_k)
 
 
-def video_b_retrieval(query: str, session_id: str, top_k: int = BALANCED_TOP_K_PER_VIDEO) -> list[dict]:
+def video_b_retrieval(query: str, session_id: str, top_k: int | None = None) -> list[dict]:
+    resolved_top_k = _single_video_top_k(top_k or BALANCED_TOP_K_PER_VIDEO)
     logger.info(
         "Applying retrieval policy=%s session_id=%s top_k=%s",
         VIDEO_B_RETRIEVAL,
         session_id,
-        top_k,
+        resolved_top_k,
     )
-    return _retrieve_for_video(query, session_id, "B", False, top_k)
+    return _retrieve_for_video(query, session_id, "B", False, resolved_top_k)
 
 
 def comparison_retrieval(
     query: str,
     session_id: str,
     hook_only: bool = False,
-    top_k_per_video: int = BALANCED_TOP_K_PER_VIDEO,
+    top_k_per_video: int | None = None,
 ) -> list[dict]:
+    resolved_top_k = _balanced_top_k_per_video(top_k_per_video or BALANCED_TOP_K_PER_VIDEO)
     logger.info(
         "Applying retrieval policy=%s session_id=%s hook_only=%s top_k_per_video=%s",
         COMPARISON_RETRIEVAL,
         session_id,
         hook_only,
-        top_k_per_video,
+        resolved_top_k,
     )
     chunks = []
     for video_id in ("A", "B"):
         if hook_only:
-            chunks.extend(hook_retrieval(query, session_id, video_id, top_k_per_video))
+            chunks.extend(hook_retrieval(query, session_id, video_id, resolved_top_k))
         else:
-            chunks.extend(_retrieve_for_video(query, session_id, video_id, False, top_k_per_video))
-    return chunks
+            chunks.extend(_retrieve_for_video(query, session_id, video_id, False, resolved_top_k))
+    return _cap_retrieved_chunks(chunks)
 
 
 def metadata_augmented_retrieval(query: str, session_id: str, video_ids: set[str]) -> list[dict]:
+    top_k = _single_video_top_k(BALANCED_TOP_K_PER_VIDEO) if len(video_ids) == 1 else _balanced_top_k_per_video()
     logger.info(
         "Applying retrieval policy=%s session_id=%s video_ids=%s top_k_per_video=%s",
         METADATA_AUGMENTED_RETRIEVAL,
         session_id,
         sorted(video_ids) or ["A", "B"],
-        BALANCED_TOP_K_PER_VIDEO,
+        top_k,
     )
     if len(video_ids) == 1:
         video_id = next(iter(video_ids))
         if video_id == "A":
-            return video_a_retrieval(query, session_id)
+            return video_a_retrieval(query, session_id, top_k)
         if video_id == "B":
-            return video_b_retrieval(query, session_id)
-    return comparison_retrieval(query, session_id, hook_only=False, top_k_per_video=BALANCED_TOP_K_PER_VIDEO)
+            return video_b_retrieval(query, session_id, top_k)
+    return comparison_retrieval(query, session_id, hook_only=False, top_k_per_video=top_k)
 
 
 def retrieve_chunks(state: CreatorSessionState) -> CreatorSessionState:
@@ -435,17 +465,20 @@ def retrieve_chunks(state: CreatorSessionState) -> CreatorSessionState:
     session_id = state["session_id"]
 
     if route == IMPROVEMENT_SUGGESTION:
+        top_k_per_video = _balanced_top_k_per_video()
         chunks = video_a_retrieval(
             f"{query} strong evidence what worked well engaging hook clarity",
             session_id,
+            top_k_per_video,
         )
         chunks.extend(
             video_b_retrieval(
                 f"{query} improvement opportunity weak hook unclear pacing missing context",
                 session_id,
+                top_k_per_video,
             )
         )
-        return {"chunks": chunks, "retrieval_policy": METADATA_AUGMENTED_RETRIEVAL}
+        return {"chunks": _cap_retrieved_chunks(chunks), "retrieval_policy": METADATA_AUGMENTED_RETRIEVAL}
 
     hook_only = route == HOOK_COMPARISON
     video_ids = _comparison_video_ids(query, route)
@@ -477,7 +510,7 @@ def retrieve_chunks(state: CreatorSessionState) -> CreatorSessionState:
             session_id=session_id,
             video_id=video_id,
             hook_only=False,
-            top_k=DEFAULT_TRANSCRIPT_TOP_K,
+            top_k=_single_video_top_k(DEFAULT_TRANSCRIPT_TOP_K),
         ),
         "retrieval_policy": VIDEO_A_RETRIEVAL
         if video_id == "A"

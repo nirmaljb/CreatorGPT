@@ -63,33 +63,34 @@ Add a short GIF or video here that shows:
 flowchart TD
     A["User enters YouTube URL and Instagram Reel URL"]
     B["POST /ingest"]
-    C["Create session and return session_id immediately"]
-    D["Extract real metadata for both videos"]
-    E["Store metadata and raw metadata in Postgres"]
-    F{Transcript path}
-    G["YouTube captions"]
-    H["Groq Whisper transcription"]
-    I["Split transcripts into chunks"]
-    J["Embed chunks with FastEmbed"]
-    K["Store searchable chunks in Qdrant"]
-    L["GET /status/{session_id}"]
-    M["Session reaches completed or clear failed state"]
-    N["POST /chat"]
-    O{Question type}
-    P["Numeric or creator question<br/>Use Postgres metadata only"]
-    Q["Transcript question<br/>Use Qdrant retrieval"]
-    R["Mixed comparison question<br/>Use Postgres metadata and Qdrant"]
-    S["Stream answer with source citations"]
+    C["Apply concurrency and session-rate limits"]
+    D["Create session and return session_id immediately"]
+    E["Extract real metadata for both videos"]
+    F["Store metadata and raw metadata in Postgres"]
+    G{Transcript path}
+    H["YouTube captions"]
+    I["Groq Whisper transcription"]
+    J["Split transcripts into capped chunks"]
+    K["Embed chunks with FastEmbed"]
+    L["Store searchable chunks in Qdrant"]
+    M["GET /status/{session_id}"]
+    N["Session reaches completed or clear failed state"]
+    O["POST /chat"]
+    P{Question type}
+    Q["Numeric or creator question<br/>Use Postgres metadata only"]
+    R["Transcript question<br/>Use capped Qdrant retrieval"]
+    S["Mixed comparison question<br/>Use Postgres metadata and Qdrant"]
+    T["Stream answer with source citations"]
 
-    A --> B --> C --> D --> E --> F
-    F -->|YouTube captions available| G
-    F -->|Captions unavailable or Instagram| H
-    G --> I
-    H --> I
-    I --> J --> K --> L --> M --> N --> O
-    O --> P --> S
-    O --> Q --> S
-    O --> R --> S
+    A --> B --> C --> D --> E --> F --> G
+    G -->|YouTube captions available| H
+    G -->|Captions unavailable or Instagram| I
+    H --> J
+    I --> J
+    J --> K --> L --> M --> N --> O --> P
+    P --> Q --> T
+    P --> R --> T
+    P --> S --> T
 ```
 
 The app should not silently fall back to fake data. If a provider fails, the session or video should show a clear error.
@@ -127,6 +128,17 @@ Then fill in these required values in `.env`:
 Optional values are already shown in [.env.example](.env.example).
 By default, the backend can start when Qdrant is temporarily unreachable and `/health` will show `qdrant: false`.
 Set `REQUIRE_QDRANT_ON_STARTUP=true` if you want startup to fail when Qdrant validation fails.
+
+Useful backpressure limits:
+
+| Variable | Default | What It Controls |
+| --- | --- | --- |
+| `MAX_VIDEO_SECONDS` | `600` | Audio download and Groq Whisper window when captions are unavailable |
+| `MAX_CONCURRENT_INGESTIONS` | `2` | Active background ingestion sessions accepted by one backend process |
+| `MAX_CHUNKS_PER_VIDEO` | `120` | Maximum transcript chunks embedded and stored for each video |
+| `MAX_CHAT_HISTORY_MESSAGES` | `12` | Recent chat messages loaded for prompt context and UI reload |
+| `MAX_RETRIEVED_CHUNKS` | `8` | Maximum transcript chunks passed into a chat answer |
+| `MAX_SESSIONS_PER_IP_PER_HOUR` | `20` | Ingest sessions accepted per IP per hour |
 
 ### 3. Install Backend
 

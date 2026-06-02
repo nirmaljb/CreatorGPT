@@ -1,11 +1,19 @@
+import inspect
 import logging
 import uuid
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from backend.app.api.schemas import ChatRequest, IngestRequest, IngestResponse
+from backend.app.core.backpressure import (
+    active_ingestions,
+    check_session_rate_limit,
+    client_ip_from_request,
+    release_ingest_slot,
+    try_acquire_ingest_slot,
+)
 from backend.app.core.config import get_settings
 from backend.app.core.logging import configure_logging
 from backend.app.ingest.pipeline import ingest_session
@@ -48,6 +56,28 @@ def startup() -> None:
     logger.info("Backend startup checks completed")
 
 
+def _runtime_limits() -> dict:
+    return {
+        "max_video_seconds": settings.max_video_seconds,
+        "max_concurrent_ingestions": settings.max_concurrent_ingestions,
+        "max_chunks_per_video": settings.max_chunks_per_video,
+        "max_chat_history_messages": settings.max_chat_history_messages,
+        "max_retrieved_chunks": settings.max_retrieved_chunks,
+        "max_sessions_per_ip_per_hour": settings.max_sessions_per_ip_per_hour,
+    }
+
+
+def _run_ingest_with_slot(session_id: str, videos: list[dict]) -> None:
+    try:
+        result = ingest_session(session_id, videos)
+        if inspect.isawaitable(result):
+            import asyncio
+
+            asyncio.run(result)
+    finally:
+        release_ingest_slot()
+
+
 @app.get("/health")
 def health() -> dict:
     postgres_ok = False
@@ -67,14 +97,57 @@ def health() -> dict:
     }
 
 
+@app.get("/config")
+def config() -> dict:
+    return {
+        "limits": _runtime_limits(),
+        "active_ingestions": active_ingestions(),
+    }
+
+
 @app.post("/ingest", response_model=IngestResponse)
-def ingest(payload: IngestRequest, background_tasks: BackgroundTasks) -> IngestResponse:
+def ingest(payload: IngestRequest, background_tasks: BackgroundTasks, request: Request) -> IngestResponse:
     session_id = str(uuid.uuid4())
     videos = [video.model_dump() for video in payload.normalized_videos()]
-    logger.info("Accepted ingest request session_id=%s videos=%s", session_id, videos)
-    create_session(session_id)
+    client_ip = client_ip_from_request(request)
+    if not try_acquire_ingest_slot(settings.max_concurrent_ingestions):
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "Too many ingestions are already running. "
+                f"Limit: {settings.max_concurrent_ingestions} concurrent ingestion(s)."
+            ),
+        )
+
+    rate_allowed, retry_after_seconds, attempts = check_session_rate_limit(
+        client_ip,
+        settings.max_sessions_per_ip_per_hour,
+    )
+    if not rate_allowed:
+        release_ingest_slot()
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "Session rate limit reached for this IP. "
+                f"Limit: {settings.max_sessions_per_ip_per_hour} session(s) per hour."
+            ),
+            headers={"Retry-After": str(retry_after_seconds)},
+        )
+
+    logger.info(
+        "Accepted ingest request session_id=%s client_ip=%s attempts_in_last_hour=%s videos=%s",
+        session_id,
+        client_ip,
+        attempts,
+        videos,
+    )
+    try:
+        create_session(session_id)
+    except Exception:
+        release_ingest_slot()
+        raise
     background_tasks.add_task(
-        ingest_session,
+        _run_ingest_with_slot,
         session_id,
         videos,
     )
@@ -106,7 +179,7 @@ def status(session_id: str) -> dict:
 def messages(session_id: str) -> dict:
     if get_session(session_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    return {"messages": get_chat_messages(session_id, limit=50)}
+    return {"messages": get_chat_messages(session_id, limit=settings.max_chat_history_messages)}
 
 
 @app.post("/chat")

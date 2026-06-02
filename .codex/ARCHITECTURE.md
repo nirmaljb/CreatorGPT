@@ -13,27 +13,30 @@
 
 ## Runtime Flow
 
-1. `POST /ingest` validates two video inputs and creates a Postgres session.
-2. Ingestion runs in a FastAPI background task.
-3. Metadata for both videos is loaded from the extraction cache or scraped through the platform extractor, then stored first.
-4. Per-video transcript/vector work runs concurrently.
-5. YouTube tries uncapped captions first, so videos longer than `MAX_VIDEO_SECONDS` can ingest when captions are available.
-6. Unavailable YouTube captions fall back to audio download plus Groq `whisper-large-v3`, where audio is trimmed to `MAX_VIDEO_SECONDS`.
-7. Instagram uses audio download plus Groq `whisper-large-v3`.
-8. Real extractor output is cached in Postgres unless `FORCE_REFRESH=true` bypasses cache reads for the run.
-9. Transcript chunks are embedded and stored in Qdrant with payload filters.
-10. Completed sessions move to `completed`; failed videos include per-video error details in status responses.
-11. Stale `processing` sessions are marked `failed` from the status path after `INGEST_STALE_SECONDS`.
-12. The frontend does not restore a saved session on refresh; every page load starts with a clean UI state.
-13. The frontend status poller aborts slow `/status` requests and keeps retrying while the browser is online.
-14. `POST /chat` loads chat history and classifies the question with a rules-first LangGraph router.
-15. Follow-up questions resolve simple video references from chat history before being re-routed.
-16. Metadata questions use typed Postgres metadata tools only and do not query Qdrant.
-17. Semantic transcript questions retrieve transcript chunks from Qdrant.
-18. Hook comparison questions retrieve Qdrant chunks with `is_hook=true`.
-19. Mixed comparison and improvement questions use typed Postgres metadata tools plus Qdrant transcript retrieval.
-20. The backend streams a Groq answer with metadata and/or transcript citations. Compare questions that mention both videos retrieve chunks from each video.
-21. Ingestion and completed chat turns update an internal per-session usage ledger in Postgres.
+1. `POST /ingest` validates two video inputs.
+2. The API enforces `MAX_CONCURRENT_INGESTIONS` and `MAX_SESSIONS_PER_IP_PER_HOUR`. Over-limit requests return `429`.
+3. Accepted requests create a Postgres session and return `session_id` immediately.
+4. Ingestion runs in a FastAPI background task.
+5. Metadata for both videos is loaded from the extraction cache or scraped through the platform extractor, then stored first.
+6. Per-video transcript/vector work runs concurrently.
+7. YouTube tries uncapped captions first, so videos longer than `MAX_VIDEO_SECONDS` can ingest when captions are available.
+8. Unavailable YouTube captions fall back to audio download plus Groq `whisper-large-v3`, where audio is trimmed to `MAX_VIDEO_SECONDS`.
+9. Instagram uses audio download plus Groq `whisper-large-v3`.
+10. Real extractor output is cached in Postgres unless `FORCE_REFRESH=true` bypasses cache reads for the run.
+11. Transcript chunks are capped by `MAX_CHUNKS_PER_VIDEO`, embedded, and stored in Qdrant with payload filters.
+12. Completed sessions move to `completed`; failed videos include per-video error details in status responses.
+13. Stale `processing` sessions are marked `failed` from the status path after `INGEST_STALE_SECONDS`.
+14. The frontend does not restore a saved session on refresh; every page load starts with a clean UI state.
+15. The frontend status poller aborts slow `/status` requests and keeps retrying while the browser is online.
+16. `POST /chat` loads recent chat history capped by `MAX_CHAT_HISTORY_MESSAGES` and classifies the question with a rules-first LangGraph router.
+17. Follow-up questions resolve simple video references from chat history before being re-routed.
+18. Metadata questions use typed Postgres metadata tools only and do not query Qdrant.
+19. Semantic transcript questions retrieve transcript chunks from Qdrant.
+20. Hook comparison questions retrieve Qdrant chunks with `is_hook=true`.
+21. Mixed comparison and improvement questions use typed Postgres metadata tools plus Qdrant transcript retrieval.
+22. Retrieved transcript context is capped by `MAX_RETRIEVED_CHUNKS`.
+23. The backend streams a Groq answer with metadata and/or transcript citations. Compare questions that mention both videos retrieve chunks from each video.
+24. Ingestion and completed chat turns update an internal per-session usage ledger in Postgres.
 
 ## Database Schema
 
@@ -134,9 +137,10 @@ Payload indexes are created for `session_id`, `video_id`, and `is_hook`.
 ## APIs
 
 - `GET /health`: checks API, Postgres, and Qdrant.
-- `POST /ingest`: accepts two video inputs and returns `session_id`.
+- `GET /config`: returns runtime backpressure limits for the frontend.
+- `POST /ingest`: accepts two video inputs and returns `session_id`. Returns `429` when concurrent ingestion or per-IP hourly session limits are exceeded.
 - `GET /status/{session_id}`: returns status, progress, errors, and metadata. If a `processing` session has not updated within `INGEST_STALE_SECONDS`, this endpoint marks it `failed`. The read path loads the session and metadata in one Postgres session and logs the returned status, step, progress, and metadata count.
-- `GET /messages/{session_id}`: returns persisted chat history.
+- `GET /messages/{session_id}`: returns persisted chat history capped by `MAX_CHAT_HISTORY_MESSAGES`.
 - `POST /chat`: streams SSE events for sources, tokens, done, or errors. Accepts `completed` sessions and older `ready` sessions. `sources` and `done` events include `route` and `retrieval_policy` for route-aware evals.
 
 ## Chat Routing
@@ -151,8 +155,8 @@ Payload indexes are created for `session_id`, `video_id`, and `is_hook`.
 - `HOOK_COMPARISON` uses Qdrant retrieval with the `is_hook=true` payload filter.
 - Named retrieval policies are used instead of one global `top_k` search: `hook_retrieval`, `video_a_retrieval`, `video_b_retrieval`, `comparison_retrieval`, and `metadata_augmented_retrieval`.
 - `MIXED_COMPARISON` combines metadata tool results with balanced Qdrant chunks and requires transcript chunk citations when chunks were retrieved.
-- `IMPROVEMENT_SUGGESTION` retrieves `top_k=4` Video A evidence for what worked and `top_k=4` Video B evidence for improvement opportunities.
-- `comparison_retrieval` retrieves `top_k=4` from Video A and `top_k=4` from Video B, then merges the context.
+- `IMPROVEMENT_SUGGESTION` retrieves Video A evidence for what worked and Video B evidence for improvement opportunities, bounded by `MAX_RETRIEVED_CHUNKS`.
+- `comparison_retrieval` retrieves from Video A and Video B separately, then merges the context. The default is `top_k=4` from each video, bounded by `MAX_RETRIEVED_CHUNKS`.
 - `FOLLOW_UP` resolves obvious references such as "their", "that video", and "what about B" from recent chat history, then re-routes.
 - Answers must cite exact source tags only, such as `[Video A metadata]` or `[Video B, chunk 0, 00:00-00:16]`.
 - Assignment evals assert the expected route and retrieval policy for each required and extended adversarial question, not only that an answer streamed.
@@ -174,6 +178,8 @@ No auth in Phase 1. This is a single-user assignment demo. Production would add 
 - Set `REQUIRE_QDRANT_ON_STARTUP=true` when deployment should fail fast if Qdrant cannot be validated.
 - `QDRANT_CHECK_COMPATIBILITY=false` by default suppresses Qdrant server-version probe warnings; collection existence, dimensions, and payload indexes are still checked when Qdrant is reachable.
 - `FORCE_REFRESH=true` bypasses extraction-cache reads when a demo needs fresh platform data.
+- Backpressure defaults are `MAX_VIDEO_SECONDS=600`, `MAX_CONCURRENT_INGESTIONS=2`, `MAX_CHUNKS_PER_VIDEO=120`, `MAX_CHAT_HISTORY_MESSAGES=12`, `MAX_RETRIEVED_CHUNKS=8`, and `MAX_SESSIONS_PER_IP_PER_HOUR=20`.
+- Current concurrency and per-IP limits are in-process safeguards. A multi-worker production deployment should move them to shared infrastructure with a durable queue/rate limiter.
 - `ffmpeg` is required for `yt-dlp` audio extraction before Groq Whisper transcription.
 - Runtime audio is written outside the repo by default to avoid reload loops.
 - For dev reload, use `uvicorn backend.app.main:app --reload --reload-dir backend/app`.
