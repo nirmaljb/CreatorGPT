@@ -6,6 +6,13 @@ This app compares one YouTube video and one Instagram Reel. It extracts metadata
 
 The goal is simple: help a user understand why two creator videos performed differently, using real metadata and transcript evidence instead of invented facts.
 
+Development is tracked in phases so reviewers can see what was built first, what is being improved now, and what remains:
+
+- [Phase 1: Thin Vertical Slice](docs/phase/phase-1.md)
+- [Phase 2: Grounded Intelligence](docs/phase/phase-2.md)
+- [Phase 3: Product UI](docs/phase/phase-3.md)
+- [Phase 4: Resilience and Demo Readiness](docs/phase/phase-4.md)
+
 Leave space here for the demo media:
 
 <!-- Demo GIF or video placeholder -->
@@ -83,6 +90,12 @@ flowchart TD
 ```
 
 The app does not silently fall back to fake data. If a provider fails, the session or video should show a clear error.
+
+Detailed Phase 1 pipeline diagrams are maintained here:
+
+- [Ingestion pipeline](docs/phase/phase-1.md#ingest-flow)
+- [Status pipeline](docs/phase/phase-1.md#status-flow)
+- [Chat pipeline](docs/phase/phase-1.md#chat-flow)
 
 ## Tech stack
 
@@ -165,6 +178,34 @@ The eval asks the assignment questions plus harder stats, vague, creative, open-
 `POST /chat` streams events for answer tokens, sources, route information, retrieval policy, completion, and errors.
 
 ## RAG design
+
+```mermaid
+flowchart TD
+    question["User question"] --> router["Rules-first LangGraph router"]
+
+    router -->|Numeric or creator facts| metadata["METADATA_ONLY"]
+    router -->|Semantic transcript question| transcript["TRANSCRIPT_ONLY"]
+    router -->|First 5 seconds or opening| hook["HOOK_COMPARISON"]
+    router -->|Performance explanation| mixed["MIXED_COMPARISON"]
+    router -->|Advice for Video B| improve["IMPROVEMENT_SUGGESTION"]
+    router -->|Short follow-up| followup["FOLLOW_UP"]
+
+    followup --> router
+    metadata --> pg["Postgres metadata tools"]
+    transcript --> qdrant["Qdrant transcript retrieval"]
+    hook --> hookChunks["Qdrant hook chunks"]
+    mixed --> pg
+    mixed --> balanced["Balanced A and B retrieval"]
+    improve --> pg
+    improve --> balanced
+
+    pg --> prompt["Grounded prompt"]
+    qdrant --> prompt
+    hookChunks --> prompt
+    balanced --> prompt
+    prompt --> llm["Groq streaming chat"]
+    llm --> answer["Answer with exact citations"]
+```
 
 The system does not let the vector database answer numeric or creator metadata questions. Those questions use typed Postgres tools:
 
