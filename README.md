@@ -122,11 +122,11 @@ Detailed Phase 1 pipeline diagrams are maintained here:
 
 Use [docs/installation.md](docs/installation.md) for the full setup guide, including system tools, dependency installation, `.env` setup, Render backend deployment, and Docker commands.
 
-## Environment variables
+### Environment variables
 
 Environment details live in [docs/installation.md](docs/installation.md). The required backend values are `GROQ_API_KEY`, `DATABASE_URL`, `QDRANT_URL`, and `QDRANT_API_KEY`; optional defaults are listed in [.env.example](.env.example).
 
-## Running locally
+### Running locally
 
 Local run commands and CI commands live in [docs/installation.md](docs/installation.md). In short, start the FastAPI backend, start the Next.js frontend, then open the frontend in the browser.
 
