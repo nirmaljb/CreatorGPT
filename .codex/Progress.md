@@ -124,6 +124,7 @@ Phase 2 implementation.
 - Updated the frontend API base handling to trim trailing slashes from hosted backend URLs before calling `/config`, `/ingest`, `/status`, `/messages`, and `/chat`.
 - Reorganized `README.md` around the requested headings: project overview, features, architecture, tech stack, setup, environment variables, running locally, demo flow, API endpoints, RAG design, cost and scalability, known limitations, and future production improvements.
 - Kept the larger README architecture flow as Mermaid and changed the small demo flow to ASCII text.
+- Moved detailed setup, environment variable, local run, Docker, Render deployment, and check commands from `README.md` into `docs/installation.md`; the README now links to the installation guide while preserving the requested headings.
 
 ## Current Next Step
 
@@ -242,3 +243,4 @@ Run `python scripts/eval_assignment_questions.py --session-id <id>` against a co
 - `make ci` passed after the Render Docker/CORS updates; backend tests now report 78 selected tests plus 1 deselected smoke test, and the mocked smoke test passes separately.
 - `backend/.venv/bin/python -m pytest backend/tests/test_startup.py`, `make backend-lint`, `git diff --check`, and `make ci` passed after adding trailing-slash normalization for backend CORS origins.
 - `make markdown-lint` passed after reorganizing the README headings and diagram formats.
+- `make markdown-lint` passed after moving setup details into `docs/installation.md`.
