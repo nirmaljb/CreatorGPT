@@ -87,6 +87,7 @@ function normalizeApiBase(value: string | undefined) {
 
 const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_BASE);
 const STATUS_REQUEST_TIMEOUT_MS = 7000;
+const STATUS_FAILURE_RETRY_MS = 3000;
 const STALLED_WARNING_MS = 60000;
 const NETWORK_MESSAGE =
   "Connection is unavailable or slow. Status polling will keep retrying when the browser is online.";
@@ -452,54 +453,51 @@ export default function Home() {
 
   useEffect(() => {
     if (!sessionId || !isOnline) return;
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), STATUS_REQUEST_TIMEOUT_MS);
-    loadStatus(sessionId, controller.signal)
-      .catch((exc) => handleRequestError(exc, "Status request failed"))
-      .finally(() => window.clearTimeout(timeout));
-    loadMessages(sessionId).catch(() => undefined);
-    return () => {
-      controller.abort();
-      window.clearTimeout(timeout);
-    };
-  }, [handleRequestError, isOnline, loadMessages, loadStatus, sessionId]);
-
-  useEffect(() => {
-    if (!sessionId || status !== "processing" || !isOnline) return;
+    const pollSessionId = sessionId;
     let stopped = false;
     let pollTimeout: number | undefined;
     let controller: AbortController | undefined;
 
-    const poll = async () => {
+    function schedulePoll(delayMs: number) {
+      if (stopped || activeSessionRef.current !== pollSessionId) return;
+      pollTimeout = window.setTimeout(() => {
+        void poll();
+      }, delayMs);
+    }
+
+    async function poll() {
+      if (stopped || activeSessionRef.current !== pollSessionId) return;
       controller = new AbortController();
       const requestTimeout = window.setTimeout(() => controller?.abort(), STATUS_REQUEST_TIMEOUT_MS);
-      let nextProgress = progressPercent;
-      let keepPolling = true;
+      let nextDelay = STATUS_FAILURE_RETRY_MS;
       try {
-        const data = await loadStatus(sessionId, controller.signal);
-        nextProgress = data.progress_percent || 0;
-        keepPolling = data.status === "processing";
+        const data = await loadStatus(pollSessionId, controller.signal);
+        if (stopped || activeSessionRef.current !== pollSessionId) return;
+        if (data.status === "ready" || data.status === "completed") {
+          await loadMessages(pollSessionId).catch(() => undefined);
+        }
+        if (data.status !== "processing") return;
+        nextDelay = statusPollDelay(data.progress_percent || 0);
       } catch (exc) {
-        handleRequestError(exc, "Status request failed");
+        if (!stopped) handleRequestError(exc, "Status request failed");
       } finally {
         window.clearTimeout(requestTimeout);
+        controller = undefined;
       }
 
-      if (!stopped && activeSessionRef.current === sessionId && keepPolling) {
-        pollTimeout = window.setTimeout(poll, statusPollDelay(nextProgress));
-      }
-    };
+      schedulePoll(nextDelay);
+    }
 
-    pollTimeout = window.setTimeout(() => {
-      void poll();
-    }, statusPollDelay(progressPercent));
+    console.info("Starting status polling loop", { sessionId: pollSessionId });
+    void poll();
 
     return () => {
+      console.info("Stopping status polling loop", { sessionId: pollSessionId });
       stopped = true;
       controller?.abort();
       if (pollTimeout) window.clearTimeout(pollTimeout);
     };
-  }, [handleRequestError, isOnline, loadStatus, sessionId, status, progressPercent]);
+  }, [handleRequestError, isOnline, loadMessages, loadStatus, sessionId]);
 
   async function handleIngest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

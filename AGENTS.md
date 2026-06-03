@@ -143,7 +143,9 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Phase 1 does not implement retry. A browser refresh starts a clean frontend state instead of restoring the previous `session_id`; a later retry flow should be explicit and should not silently resume a stale failed session.
 - `GET /status/{session_id}` marks long-stale `processing` sessions as `failed` after `INGEST_STALE_SECONDS`, so stopped background tasks surface as readable frontend errors instead of remaining stuck forever.
 - `GET /status/{session_id}` reads the session row and video metadata in one Postgres session and logs status, step, progress, and metadata count for debugging stuck frontend progress.
+- `GET /status/{session_id}` returns `Cache-Control: no-store` so browsers and hosted proxies do not reuse stale progress payloads.
 - The frontend treats network loss separately from ingestion failure. Browser-offline polling pauses with a visible connection message; slow, timed-out, or API-unreachable status requests keep retrying while the browser is online.
+- The frontend uses one immediate status polling loop per active session. It does not run a separate initial status request and progress-dependent polling loop, which avoids competing aborts and stale 8% progress states.
 - YouTube ingestion first tries `youtube-transcript-api` captions and normalizes captions into the same `{text, start, end}` shape as Whisper output. If captions are unavailable or the caption API fails, ingestion falls back to `yt-dlp` audio extraction plus Groq `whisper-large-v3`.
 - YouTube caption transcripts are not capped by `MAX_VIDEO_SECONDS`; long YouTube videos can ingest through captions without Whisper. `MAX_VIDEO_SECONDS` only limits audio download/Whisper fallback.
 - Per-video transcript/vector work now runs concurrently with `asyncio.gather` after both metadata rows are stored. Blocking operations run through `asyncio.to_thread`.

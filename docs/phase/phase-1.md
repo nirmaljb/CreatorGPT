@@ -293,6 +293,7 @@ flowchart LR
   - Browser offline state shows a connection message and pauses polling.
   - Slow, timed-out, or API-unreachable status requests show a connection message but keep retrying while the browser is online.
   - Polling resumes when the browser comes back online.
+  - One immediate polling loop owns status loading for the active session, and `/status` responses are marked `Cache-Control: no-store` to avoid stale progress payloads.
 
 - FastAPI background task over durable queue:
   - Simple enough for the assignment demo.

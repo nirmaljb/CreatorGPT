@@ -128,6 +128,7 @@ Phase 2 implementation.
 - Added phase-development links near the top of `README.md`, linked the Phase 1 ingestion/status/chat pipeline diagrams from the README architecture section, and added a Mermaid RAG flow directly under the README RAG design heading.
 - Added `issues/prd.md` for the cross-phase frontend error-handling and retry work after the design interview locked URL validation, structured errors, whole-session retry, state guards, stalled warnings, and no fake cancellation.
 - Broke the error-handling PRD into nine local vertical-slice issue files under `issues/`, ordered from URL validation through structured errors, ingestion failures, retry, state guards, polling, rate-limit UX, chat stream errors, and final docs/verification.
+- Fixed the frontend 8% stuck-ingest symptom by replacing overlapping status fetch effects with one immediate polling loop per active session, retrying transient status failures from that loop, and marking `/status/{session_id}` responses as `Cache-Control: no-store`.
 
 ## Current Next Step
 
@@ -251,3 +252,4 @@ Start implementation with `issues/001-validate-video-urls-before-ingest.md`.
 - `frontend/node_modules/.bin/markdownlint-cli2 issues/prd.md` and `git diff --check` passed after adding the error-handling PRD.
 - `make markdown-lint` failed after adding the PRD because untracked skill markdown files under `.codex/skills/` have pre-existing markdownlint errors; the new PRD itself passes markdown lint.
 - `frontend/node_modules/.bin/markdownlint-cli2 issues/*.md` and `git diff --check` passed after creating the local issue files.
+- `backend/.venv/bin/python -m pytest backend/tests/test_status_endpoint.py`, `make backend-lint`, `make frontend-lint`, `make frontend-typecheck`, `make frontend-build`, and `git diff --check` passed after the single-loop status polling fix.

@@ -41,5 +41,6 @@ def test_status_reloads_after_stale_processing_guard(monkeypatch) -> None:
     response = client.get(f"/status/{session_id}")
 
     assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
     assert response.json()["status"] == "failed"
     assert stale_calls == [(session_id, 123)]

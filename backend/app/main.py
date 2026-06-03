@@ -2,7 +2,7 @@ import inspect
 import logging
 import uuid
 
-from fastapi import BackgroundTasks, FastAPI, Request
+from fastapi import BackgroundTasks, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
@@ -168,7 +168,8 @@ def ingest(payload: IngestRequest, background_tasks: BackgroundTasks, request: R
 
 
 @app.get("/status/{session_id}")
-def status(session_id: str) -> dict:
+def status(session_id: str, response: Response) -> dict:
+    response.headers["Cache-Control"] = "no-store"
     row = get_session(session_id)
     if row is None:
         raise AppErrorHTTPException(status_code=404, error=session_not_found_error())
