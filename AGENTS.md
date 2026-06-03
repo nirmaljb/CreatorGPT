@@ -157,6 +157,7 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 - Video metadata rows store raw extractor metadata, per-video ingest status, failure messages, transcript source, chunk count, and cache flags.
 - Transcript source is recorded as `captions`, `whisper`, or `unavailable` in Postgres and chunk payloads.
 - Extraction cache is stored in Postgres by platform, URL, cache version, and `MAX_VIDEO_SECONDS` so repeated demos reuse real extractor output. Cache version `extract-v3` avoids reusing older capped-caption or local-Whisper entries. `FORCE_REFRESH=true` bypasses cache reads and forces fresh extraction.
+- `yt-dlp` metadata and audio extraction support optional authenticated cookies through `YTDLP_COOKIES_PATH` or `YTDLP_COOKIES_FROM_BROWSER`. Prefer `YTDLP_COOKIES_PATH` with a Netscape-format cookie file for repeatable local/deployed runs; browser extraction is local-only. Cookie file configuration takes precedence when both are set.
 - Ingestion must fail visibly for real extractor/download/transcription errors; do not silently fall back to fake metadata, fake transcripts, or fabricated chunks.
 - URL/platform validation now runs in the frontend and backend before ingestion starts. Backend validation happens before session creation, ingest slot acquisition, or per-IP rate-limit accounting.
 - YouTube validation accepts `youtube.com/watch?v=...`, `youtube.com/shorts/...`, and `youtu.be/...` forms with query strings. Instagram validation accepts only `instagram.com/reel/...` forms.
@@ -181,4 +182,5 @@ Build a full-stack RAG chatbot that compares one YouTube video and one Instagram
 
 - Required external services and keys are provided in `.env`.
 - `ffmpeg` must be installed locally for reliable `yt-dlp` audio extraction.
+- YouTube extraction may require `YTDLP_COOKIES_PATH` when YouTube returns sign-in or bot-check challenges.
 - Instagram extraction may require cookies depending on the URL/account availability. Phase 1 reports a clear failure instead of bypassing platform restrictions.

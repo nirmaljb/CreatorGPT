@@ -27,6 +27,7 @@
 - Store sessions, video metadata, transcript chunks, and chat history.
 - Store raw metadata, transcript source, chunk counts, cache flags, and per-video failure state.
 - Cache real extraction results for repeatable demos, with a `FORCE_REFRESH=true` escape hatch.
+- Support optional `yt-dlp` cookie configuration for YouTube sign-in or bot-check challenges.
 - Store vectors in Qdrant with `video_id` and `session_id` payload filters.
 - Build minimal Next.js UI with two URL inputs, progress state, clean refresh behavior, offline handling, and streaming chat.
 - Verify one full flow: ingest -> status complete -> chat -> cited answer.
@@ -37,6 +38,7 @@
 - Status reaches `completed` or a readable `failed` state.
 - Metadata cards render for both videos when available.
 - Per-video status explains platform/caption/download/transcription failures.
+- YouTube sign-in or bot-check failures explain the cookie configuration path instead of requiring raw `yt-dlp` debugging.
 - API startup can continue when Qdrant Cloud is temporarily unreachable, while `/health` reports `qdrant: false`; deployments can opt into fail-fast Qdrant validation with `REQUIRE_QDRANT_ON_STARTUP=true`.
 - Refreshing the frontend starts from a clean state instead of restoring a stale in-progress session.
 - Stalled background ingestion is surfaced as failed status after `INGEST_STALE_SECONDS`; automatic retry is deferred.

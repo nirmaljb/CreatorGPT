@@ -5,6 +5,7 @@ from yt_dlp import YoutubeDL
 from yt_dlp.utils import download_range_func
 
 from backend.app.core.config import get_settings
+from backend.app.ingest.yt_dlp_options import yt_dlp_options
 
 logger = logging.getLogger(__name__)
 
@@ -16,20 +17,22 @@ def download_audio(url: str, session_id: str, video_id: str, duration_seconds: f
     prefix = f"{session_id}_{video_id}"
     should_trim = bool(duration_seconds and duration_seconds > settings.max_video_seconds)
 
-    opts = {
-        "format": "bestaudio/best",
-        "outtmpl": str(tmp_dir / f"{prefix}.%(ext)s"),
-        "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
-        "postprocessors": [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "128",
-            }
-        ],
-    }
+    opts = yt_dlp_options(
+        {
+            "format": "bestaudio/best",
+            "outtmpl": str(tmp_dir / f"{prefix}.%(ext)s"),
+            "noplaylist": True,
+            "quiet": True,
+            "no_warnings": True,
+            "postprocessors": [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "128",
+                }
+            ],
+        }
+    )
     if should_trim:
         opts["download_ranges"] = download_range_func(None, [(0, settings.max_video_seconds)])
         opts["force_keyframes_at_cuts"] = True

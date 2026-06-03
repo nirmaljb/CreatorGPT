@@ -31,6 +31,7 @@ Creators need quick, evidence-backed explanations for performance differences. T
 - Extract transcript dynamically through YouTube captions or Groq `whisper-large-v3` fallback.
 - Record transcript source as `captions`, `whisper`, or `unavailable`.
 - Store raw extractor metadata and per-video extraction failures.
+- Support optional `yt-dlp` cookies for YouTube access challenges without fabricating fallback metadata or transcripts.
 - Cache real extraction results for repeatable demos, with `FORCE_REFRESH=true` for fresh extraction.
 - Chunk and embed transcripts into Qdrant with `session_id` and `video_id` payloads.
 - Maintain persisted session and chat history in Postgres.

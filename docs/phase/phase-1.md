@@ -11,6 +11,7 @@ Included in this phase:
 - Background ingestion that returns a `session_id` immediately.
 - Fresh page loads start from an empty UI state instead of restoring the previous session.
 - Metadata extraction for two videos.
+- Optional authenticated `yt-dlp` extraction with `YTDLP_COOKIES_PATH` or `YTDLP_COOKIES_FROM_BROWSER`.
 - Platform-specific extractors for YouTube and Instagram.
 - Postgres extraction cache for repeatable demos, with `FORCE_REFRESH=true` to bypass cache reads.
 - Raw extractor metadata and per-video ingestion diagnostics in Postgres.
@@ -43,7 +44,7 @@ Out of scope for this phase:
 - Embeddings: FastEmbed with `BAAI/bge-small-en-v1.5`.
 - Vector DB: Qdrant Cloud with cosine vectors and payload filters.
 - Relational DB: Neon Postgres.
-- Metadata/audio extraction: `yt-dlp`.
+- Metadata/audio extraction: `yt-dlp`, with optional cookie file or local browser-cookie support.
 - YouTube captions: `youtube-transcript-api`.
 - Whisper fallback: Groq `whisper-large-v3`.
 - Runtime media support: `ffmpeg`.
@@ -75,7 +76,7 @@ flowchart TD
     Validate --> Session[Create Postgres session: processing]
     Session --> Background[Start background ingestion]
 
-    Background --> Metadata[Cache-aware metadata pass for both videos]
+    Background --> Metadata[Cache-aware metadata pass for both videos with yt-dlp cookie options when configured]
     Metadata --> StoreMeta[Upsert video_metadata in Postgres]
     StoreMeta --> Parallel[Run transcript/vector work concurrently]
 
@@ -258,6 +259,11 @@ flowchart LR
 - YouTube captions before Whisper:
   - Much faster and cheaper for YouTube.
   - Captions may be unavailable or imperfect, so Whisper fallback remains.
+
+- Optional `yt-dlp` cookies:
+  - `YTDLP_COOKIES_PATH` supports sign-in or bot-check protected YouTube extraction without hardcoding secrets.
+  - `YTDLP_COOKIES_FROM_BROWSER` is useful for local development but is not reliable in deployed containers.
+  - The app still reports a visible ingestion failure if authenticated extraction is not configured or access is still denied.
 
 - Groq Whisper fallback for Instagram:
   - More reliable than depending on platform transcript support.

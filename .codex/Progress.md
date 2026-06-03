@@ -129,10 +129,13 @@ Phase 2 implementation.
 - Added `issues/prd.md` for the cross-phase frontend error-handling and retry work after the design interview locked URL validation, structured errors, whole-session retry, state guards, stalled warnings, and no fake cancellation.
 - Broke the error-handling PRD into nine local vertical-slice issue files under `issues/`, ordered from URL validation through structured errors, ingestion failures, retry, state guards, polling, rate-limit UX, chat stream errors, and final docs/verification.
 - Fixed the frontend 8% stuck-ingest symptom by replacing overlapping status fetch effects with one immediate polling loop per active session, retrying transient status failures from that loop, and marking `/status/{session_id}` responses as `Cache-Control: no-store`.
+- Added optional `yt-dlp` cookie authentication for metadata and audio extraction through `YTDLP_COOKIES_PATH` and `YTDLP_COOKIES_FROM_BROWSER`, with cookie-file precedence for repeatable local/deployed runs.
+- Updated YouTube access error classification so sign-in or bot-check failures produce a structured retryable message that points to `YTDLP_COOKIES_PATH`.
+- Documented the YouTube cookie workflow in `.env.example`, `.gitignore`, README, installation docs, architecture notes, phase docs, product spec, and plan notes.
 
 ## Current Next Step
 
-Start implementation with `issues/001-validate-video-urls-before-ingest.md`.
+Verify the `yt-dlp` cookie configuration path with focused backend tests, then retry the failed YouTube ingest after configuring a valid cookies file.
 
 ## Known Issues
 
@@ -253,3 +256,7 @@ Start implementation with `issues/001-validate-video-urls-before-ingest.md`.
 - `make markdown-lint` failed after adding the PRD because untracked skill markdown files under `.codex/skills/` have pre-existing markdownlint errors; the new PRD itself passes markdown lint.
 - `frontend/node_modules/.bin/markdownlint-cli2 issues/*.md` and `git diff --check` passed after creating the local issue files.
 - `backend/.venv/bin/python -m pytest backend/tests/test_status_endpoint.py`, `make backend-lint`, `make frontend-lint`, `make frontend-typecheck`, `make frontend-build`, and `git diff --check` passed after the single-loop status polling fix.
+- `backend/.venv/bin/python -m pytest backend/tests/test_ytdlp_options.py backend/tests/test_app_errors.py` passed after adding `yt-dlp` cookie option support and YouTube bot-check error classification.
+- `make backend-tests` passed after the `yt-dlp` cookie option change; backend tests now report 92 selected tests plus 1 deselected smoke test.
+- `make backend-lint`, `frontend/node_modules/.bin/markdownlint-cli2 README.md docs/installation.md docs/phase/phase-1.md .codex/ARCHITECTURE.md .codex/PLANS.md .codex/PRODUCT_SPEC.md AGENTS.md .codex/Progress.md`, and `git diff --check` passed after the cookie docs/code update.
+- `make markdown-lint` still fails on pre-existing `.codex/skills/` markdownlint errors outside this change; the changed docs pass markdownlint directly.

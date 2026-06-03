@@ -9,7 +9,7 @@
 - Embeddings: FastEmbed `BAAI/bge-small-en-v1.5`.
 - Vector DB: Qdrant Cloud.
 - Relational DB: Neon Postgres.
-- Extraction: `yt-dlp`, `youtube-transcript-api`, Groq `whisper-large-v3`.
+- Extraction: `yt-dlp`, optional `yt-dlp` cookie auth, `youtube-transcript-api`, Groq `whisper-large-v3`.
 
 ## Runtime Flow
 
@@ -18,6 +18,7 @@
 3. Accepted requests create a Postgres session and return `session_id` immediately.
 4. Ingestion runs in a FastAPI background task.
 5. Metadata for both videos is loaded from the extraction cache or scraped through the platform extractor, then stored first.
+   `yt-dlp` receives `YTDLP_COOKIES_PATH` or `YTDLP_COOKIES_FROM_BROWSER` options when configured.
 6. Per-video transcript/vector work runs concurrently.
 7. YouTube tries uncapped captions first, so videos longer than `MAX_VIDEO_SECONDS` can ingest when captions are available.
 8. Unavailable YouTube captions fall back to audio download plus Groq `whisper-large-v3`, where audio is trimmed to `MAX_VIDEO_SECONDS`.
@@ -182,6 +183,7 @@ No auth in Phase 1. This is a single-user assignment demo. Production would add 
 - Set `REQUIRE_QDRANT_ON_STARTUP=true` when deployment should fail fast if Qdrant cannot be validated.
 - `QDRANT_CHECK_COMPATIBILITY=false` by default suppresses Qdrant server-version probe warnings; collection existence, dimensions, and payload indexes are still checked when Qdrant is reachable.
 - `FORCE_REFRESH=true` bypasses extraction-cache reads when a demo needs fresh platform data.
+- `YTDLP_COOKIES_PATH` passes a Netscape-format cookie file to `yt-dlp` for videos that trigger sign-in or bot-check challenges. `YTDLP_COOKIES_FROM_BROWSER` is supported for local browser-cookie extraction. Cookie file configuration takes precedence when both are set.
 - Backpressure defaults are `MAX_VIDEO_SECONDS=600`, `MAX_CONCURRENT_INGESTIONS=2`, `MAX_CHUNKS_PER_VIDEO=120`, `MAX_CHAT_HISTORY_MESSAGES=12`, `MAX_RETRIEVED_CHUNKS=8`, and `MAX_SESSIONS_PER_IP_PER_HOUR=20`.
 - Current concurrency and per-IP limits are in-process safeguards. A multi-worker production deployment should move them to shared infrastructure with a durable queue/rate limiter.
 - `ffmpeg` is required for `yt-dlp` audio extraction before Groq Whisper transcription.

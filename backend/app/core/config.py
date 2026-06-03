@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     ingest_stale_seconds: int = Field(default=900, alias="INGEST_STALE_SECONDS")
     tmp_dir: str = Field(default="/private/tmp/creator-rag", alias="TMP_DIR")
     force_refresh: bool = Field(default=False, alias="FORCE_REFRESH")
+    ytdlp_cookies_path: str = Field(default="", alias="YTDLP_COOKIES_PATH")
+    ytdlp_cookies_from_browser: str = Field(default="", alias="YTDLP_COOKIES_FROM_BROWSER")
 
     cors_origins: str = Field(default="http://localhost:3000", alias="CORS_ORIGINS")
     cors_origin_regex: str = Field(default="", alias="CORS_ORIGIN_REGEX")

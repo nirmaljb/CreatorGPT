@@ -124,6 +124,20 @@ def _lower_error_text(exc: BaseException) -> str:
     return str(exc or "").lower()
 
 
+def _youtube_access_error(video_id: str | None = None) -> AppError:
+    return AppError(
+        code="INGEST_YOUTUBE_ACCESS",
+        message=(
+            "YouTube video could not be accessed. It may be unavailable, private, restricted, "
+            "or require yt-dlp cookies. Configure YTDLP_COOKIES_PATH with an exported Netscape "
+            "cookies file and start a new ingest session."
+        ),
+        scope="video",
+        retryable=True,
+        video_id=video_id,
+    )
+
+
 def classify_ingest_error(
     exc: BaseException,
     stage: str,
@@ -144,13 +158,12 @@ def classify_ingest_error(
                 video_id=video_id,
             )
         if normalized_platform == "youtube":
-            return AppError(
-                code="INGEST_YOUTUBE_ACCESS",
-                message="YouTube video could not be accessed. It may be unavailable, private, or restricted.",
-                scope="video",
-                retryable=True,
-                video_id=video_id,
-            )
+            return _youtube_access_error(video_id)
+
+    if normalized_platform == "youtube" and any(
+        marker in text for marker in ("cookies", "login", "sign in", "confirm you're not a bot", "captcha")
+    ):
+        return _youtube_access_error(video_id)
 
     if normalized_platform == "instagram" and any(
         marker in text for marker in ("private", "unavailable", "cookies", "login", "sign in")

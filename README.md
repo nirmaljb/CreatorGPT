@@ -107,7 +107,7 @@ Detailed Phase 1 pipeline diagrams are maintained here:
 | Chat model | Groq `llama-3.3-70b-versatile` | Streams final chat answers |
 | Transcription | Groq `whisper-large-v3` | Creates transcripts when captions are unavailable |
 | YouTube captions | `youtube-transcript-api` | Fast transcript path for YouTube videos with captions |
-| Media extraction | `yt-dlp`, `ffmpeg` | Reads video metadata and downloads temporary audio |
+| Media extraction | `yt-dlp`, `ffmpeg` | Reads video metadata and downloads temporary audio, with optional cookie auth |
 | Embeddings | FastEmbed `BAAI/bge-small-en-v1.5` | Converts transcript chunks into vectors |
 | Vector database | Qdrant Cloud | Stores and searches transcript chunks |
 | Relational database | Neon Postgres | Stores sessions, video metadata, raw metadata, cache, chat history, and usage ledger |
@@ -271,6 +271,7 @@ These safeguards are process-local and suitable for the demo. A production deplo
 ## Known limitations
 
 - Instagram extraction may require cookies depending on account/video availability.
+- Some YouTube videos may require `YTDLP_COOKIES_PATH` when YouTube returns a sign-in or bot-check challenge.
 - Some platforms do not expose follower count/views consistently.
 - FastAPI background tasks are used for the demo; production should use a durable queue.
 - Raw audio is temporary and deleted after transcription.

@@ -32,6 +32,28 @@ Then fill in the required backend values:
 
 Optional values are shown in [.env.example](../.env.example).
 
+## yt-dlp cookies
+
+Some YouTube videos return a bot-check or sign-in error unless `yt-dlp` is given authenticated cookies. The app supports two options:
+
+| Variable | Use For |
+| --- | --- |
+| `YTDLP_COOKIES_PATH` | Absolute path to a Netscape-format cookies file used by `yt-dlp --cookies` |
+| `YTDLP_COOKIES_FROM_BROWSER` | Local-only browser source such as `chrome`, `chrome:Profile 1`, or `firefox:default` |
+
+Prefer `YTDLP_COOKIES_PATH` for repeatable local runs and deployments. Browser extraction is convenient locally, but it depends on the backend process being able to read and decrypt that browser profile.
+
+Recommended YouTube flow:
+
+1. Open an incognito/private browser window and sign in to YouTube.
+2. In the same tab, visit `https://www.youtube.com/robots.txt`.
+3. Export only the YouTube cookies with a trusted Netscape-format cookies exporter.
+4. Save the file outside committed source, for example `/private/tmp/creator-rag/youtube-cookies.txt`.
+5. Set `YTDLP_COOKIES_PATH=/private/tmp/creator-rag/youtube-cookies.txt` in `.env`.
+6. Restart the backend and start a new ingest session.
+
+If both cookie variables are set, `YTDLP_COOKIES_PATH` takes precedence. Failed sessions are not resumed; submit the URLs again after changing cookie configuration.
+
 ## Hosted frontend and backend
 
 Set these together to avoid CORS errors:
@@ -56,6 +78,8 @@ Use exact origins when possible. `CORS_ORIGIN_REGEX` is intended only for truste
 | `REQUIRE_QDRANT_ON_STARTUP` | `false` | Whether startup fails when Qdrant validation fails |
 | `QDRANT_CHECK_COMPATIBILITY` | `false` | Whether Qdrant client checks server version at startup |
 | `FORCE_REFRESH` | `false` | Whether extraction cache reads are bypassed |
+| `YTDLP_COOKIES_PATH` | blank | Netscape-format cookie file for authenticated `yt-dlp` extraction |
+| `YTDLP_COOKIES_FROM_BROWSER` | blank | Local browser cookie source for `yt-dlp` extraction |
 
 ## Backpressure limits
 

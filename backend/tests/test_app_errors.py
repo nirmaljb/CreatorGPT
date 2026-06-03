@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from backend.app.core.app_errors import AppError
+from backend.app.core.app_errors import AppError, classify_ingest_error
 from backend.app.store import database
 from backend.app.store.database import db_session
 from backend.app.store.models import Base, SessionModel
@@ -100,3 +100,17 @@ def test_stale_ingest_persists_structured_retryable_errors(sqlite_database) -> N
     assert session["error"]["code"] == "INGEST_STALLED"
     assert session["error"]["retryable"]
     assert session["metadata"][0]["video_error"]["code"] == "INGEST_STALLED"
+
+
+def test_youtube_bot_check_error_mentions_cookie_configuration() -> None:
+    error = classify_ingest_error(
+        RuntimeError("Sign in to confirm you’re not a bot. Use --cookies-from-browser or --cookies"),
+        stage="metadata",
+        platform="youtube",
+        video_id="A",
+    )
+
+    assert error.code == "INGEST_YOUTUBE_ACCESS"
+    assert error.retryable
+    assert error.video_id == "A"
+    assert "YTDLP_COOKIES_PATH" in error.message

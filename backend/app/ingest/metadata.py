@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 from yt_dlp import YoutubeDL
 
 from backend.app.ingest.cache import sanitize_json
+from backend.app.ingest.yt_dlp_options import yt_dlp_options
 
 logger = logging.getLogger(__name__)
 
@@ -78,12 +79,14 @@ def extract_raw_metadata(url: str, session_id: str, video_id: str, expected_plat
         expected_platform or "auto",
         url,
     )
-    opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "skip_download": True,
-        "noplaylist": True,
-    }
+    opts = yt_dlp_options(
+        {
+            "quiet": True,
+            "no_warnings": True,
+            "skip_download": True,
+            "noplaylist": True,
+        }
+    )
     with YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=False)
     logger.info(
