@@ -26,6 +26,7 @@ Leave space here for the demo media:
 | [Plans](.codex/PLANS.md) | Phase milestones and acceptance criteria | Reviewers and maintainers |
 | [Progress](.codex/Progress.md) | Work completed, checks run, and current next steps | Anyone tracking status |
 | [Installation](docs/installation.md) | Setup, environment variables, local run commands, and Render deployment | Developers running the app |
+| [FAQ](docs/FAQ.md) | Common architecture, correctness, cost, scale, and demo-risk questions | Demo rehearsal |
 | [Phase 1](docs/phase/phase-1.md) | Thin vertical slice scope and flow | Demo setup |
 | [Phase 2](docs/phase/phase-2.md) | Grounded intelligence and eval scope | RAG quality work |
 | [Phase 3](docs/phase/phase-3.md) | Product UI scope | Frontend polish |
@@ -270,6 +271,8 @@ These safeguards are process-local and suitable for the demo. A production deplo
 
 ## Known limitations
 
+See [docs/FAQ.md](docs/FAQ.md) for plain-English answers about why these limitations exist and how they affect the demo.
+
 - Instagram extraction may require cookies depending on account/video availability.
 - Some YouTube videos may require `YTDLP_COOKIES_PATH` when YouTube returns a sign-in or bot-check challenge.
 - Some platforms do not expose follower count/views consistently.
@@ -281,6 +284,8 @@ These safeguards are process-local and suitable for the demo. A production deplo
 - The current router is rules-first for determinism. It may need an LLM classifier if future evals show that rules miss important phrasing.
 
 ## Future production improvements
+
+See [docs/FAQ.md](docs/FAQ.md) for more detail on the production path, especially queueing, cost controls, and scaling beyond the demo.
 
 - Move ingestion from FastAPI background tasks to a durable queue.
 - Add explicit retry controls for failed videos and failed sessions.
