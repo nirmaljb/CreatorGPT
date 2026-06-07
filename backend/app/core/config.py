@@ -13,6 +13,18 @@ class Settings(BaseSettings):
 
     database_url: str = Field(default="", alias="DATABASE_URL")
 
+    google_oauth_client_id: str = Field(default="", alias="GOOGLE_OAUTH_CLIENT_ID")
+    google_oauth_client_secret: str = Field(default="", alias="GOOGLE_OAUTH_CLIENT_SECRET")
+    google_oauth_redirect_uri: str = Field(default="", alias="GOOGLE_OAUTH_REDIRECT_URI")
+    frontend_app_url: str = Field(default="http://localhost:3000", alias="FRONTEND_APP_URL")
+    token_encryption_key: str = Field(default="", alias="TOKEN_ENCRYPTION_KEY")
+    oauth_state_ttl_seconds: int = Field(default=600, alias="OAUTH_STATE_TTL_SECONDS", ge=60)
+    auth_session_ttl_seconds: int = Field(default=2_592_000, alias="AUTH_SESSION_TTL_SECONDS", ge=300)
+    auth_session_cookie_name: str = Field(default="creator_session", alias="AUTH_SESSION_COOKIE_NAME")
+    auth_csrf_cookie_name: str = Field(default="creator_csrf", alias="AUTH_CSRF_COOKIE_NAME")
+    auth_cookie_secure: bool = Field(default=False, alias="AUTH_COOKIE_SECURE")
+    auth_cookie_samesite: str = Field(default="lax", alias="AUTH_COOKIE_SAMESITE")
+
     qdrant_url: str = Field(default="", alias="QDRANT_URL")
     qdrant_api_key: str = Field(default="", alias="QDRANT_API_KEY")
     qdrant_collection: str = Field(default="creator_video_chunks", alias="QDRANT_COLLECTION")
@@ -41,14 +53,7 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         origins = {origin.strip().rstrip("/") for origin in self.cors_origins.split(",") if origin.strip()}
-        origins.update(
-            {
-                "http://localhost:3000",
-                "http://localhost:3001",
-                "http://127.0.0.1:3000",
-                "http://127.0.0.1:3001",
-            }
-        )
+        origins.discard("*")
         return sorted(origins)
 
     @property

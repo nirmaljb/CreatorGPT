@@ -1,114 +1,163 @@
 # Plans
 
-## Phase 0 — Contracts and Demo Safety
+## Milestone 0: Pivot Documentation And Product Contract
 
-### Milestones
+### Scope
 
-- Define API contracts for ingest, status, messages, health, and chat.
-- Define Postgres schema for sessions, video metadata, extraction cache, and chat history.
-- Define provider interfaces for LLM, embeddings, vector storage, and platform-specific transcript extraction.
-- Add env validation and `.env.example`.
-- Create README skeleton, Progress.md, and demo script outline.
-- Select known-good YouTube and Instagram URLs.
+- Replace old comparison-demo docs with the YouTube diagnosis product direction.
+- Define the report-first MVP.
+- Define OAuth, privacy, schema, and analyzer boundaries.
+- Define the first implementation milestone.
 
 ### Acceptance Criteria
 
-- A new engineer can understand the intended contracts before reading implementation code.
-- Missing env vars fail clearly.
-- Demo URLs are known before recording.
+- `AGENTS.md` reflects the new product and workflow.
+- `.codex/PRODUCT_SPEC.md` describes the YouTube diagnosis product.
+- `.codex/ARCHITECTURE.md` describes `analysis_run`, OAuth, snapshots, analyzers, and report-first flow.
+- `README.md` introduces the pivot product clearly.
+- `.codex/Progress.md` records the pivot status and next step.
 
-## Phase 1 — Thin Vertical Slice
+## Milestone 1: OAuth-Connected Analysis Skeleton
 
-### Milestones
+### Scope
 
-- Build FastAPI ingest/status/chat endpoints.
-- Return `session_id` immediately from ingestion.
-- Run ingestion in the background.
-- Store sessions, video metadata, transcript chunks, and chat history.
-- Store raw metadata, transcript source, chunk counts, cache flags, and per-video failure state.
-- Cache real extraction results for repeatable demos, with a `FORCE_REFRESH=true` escape hatch.
-- Support optional `yt-dlp` cookie configuration for YouTube sign-in or bot-check challenges.
-- Store vectors in Qdrant with `video_id` and `session_id` payload filters.
-- Build minimal Next.js UI with two URL inputs, progress state, clean refresh behavior, offline handling, and streaming chat.
-- Verify one full flow: ingest -> status complete -> chat -> cited answer.
-
-### Acceptance Criteria
-
-- User can ingest two videos from the UI.
-- Status reaches `completed` or a readable `failed` state.
-- Metadata cards render for both videos when available.
-- Per-video status explains platform/caption/download/transcription failures.
-- YouTube sign-in or bot-check failures explain the cookie configuration path instead of requiring raw `yt-dlp` debugging.
-- API startup can continue when Qdrant Cloud is temporarily unreachable, while `/health` reports `qdrant: false`; deployments can opt into fail-fast Qdrant validation with `REQUIRE_QDRANT_ON_STARTUP=true`.
-- Refreshing the frontend starts from a clean state instead of restoring a stale in-progress session.
-- Stalled background ingestion is surfaced as failed status after `INGEST_STALE_SECONDS`; automatic retry is deferred.
-- Chat streams and cites metadata/chunks.
-- Full flow works against live Neon, Qdrant, and Groq credentials.
-
-## Phase 2 — Grounded Intelligence
-
-### Milestones
-
-- Add rules-first LangGraph routing for metadata, transcript, hook, mixed comparison, improvement, and follow-up questions.
-- Use typed Postgres metadata tools for numeric and creator/follower questions.
-- Use transcript retrieval only for semantic and recommendation questions.
-- Restrict hook comparison to first-5-second chunks.
-- Add named retrieval policies so comparison questions retrieve balanced Video A and Video B evidence.
-- Resolve simple follow-up references from recent chat history, then re-route.
-- Add citation validation.
-- Expose route and retrieval policy in chat SSE payloads so evals can assert the selected path directly.
-- Add a per-session internal usage ledger for transcript seconds, chunk/embedding counts, cache hits/misses, model names, and chat token usage.
-- Add runtime backpressure limits for ingest concurrency, per-IP sessions, per-video chunks, chat history, retrieved chunks, and Whisper/audio seconds.
-- Add an eval script for the assignment's expected question set before making further retrieval/chunking changes.
+- Add Alembic migration workflow.
+- Add schema for users, channels, OAuth tokens, and analysis runs.
+- Implement Google OAuth start/callback.
+- Store encrypted refresh tokens.
+- Add `GET /me`.
+- Add `POST /youtube/disconnect`.
+- Add provider wrappers for YouTube channel identity and owned upload listing.
+- Support multiple authenticated YouTube channels with one active channel in the MVP UI.
+- Reject Shorts from MVP diagnosis.
+- Add explicit `analysis_run` statuses for FastAPI background-task execution.
+- Add linked retry semantics for failed analysis runs.
+- Add `run_reason` and linked-run semantics for refresh and manual-context revisions.
+- Add a minimal frontend path:
+  - Connect YouTube;
+  - select owned video;
+  - create analysis run.
 
 ### Acceptance Criteria
 
-- Metadata questions do not depend on vector retrieval.
-- Numeric and creator questions bypass Qdrant retrieval entirely.
-- Hook questions cite hook chunks only.
-- Recommendation answers cite transcript evidence and metrics.
-- Improvement answers retrieve Video A evidence for what worked and Video B evidence for improvement opportunities.
-- Comparison and metadata-augmented routes retrieve `top_k=4` from Video A and `top_k=4` from Video B instead of one global `top_k=8` search.
-- Route-aware evals verify expected route, expected retrieval policy, citation shape, numeric values, unavailable metric behavior, vague/open-ended questions, creative synthesis, multi-step prompts, and incorrect-premise questions.
-- Usage ledger rows are created for each ingest session and updated after ingestion/chat without requiring real providers in CI.
-- Backpressure limits are enforced by backend tests and surfaced to the frontend through `GET /config`.
-- Follow-up questions resolve obvious video references without using a full query-rewrite pipeline.
-- Eval script passes the assignment's core questions.
+- A test user can connect YouTube in OAuth Testing mode.
+- The backend stores the user, channel, and encrypted refresh token.
+- The frontend can show the connected channel.
+- Users with multiple channels can choose one active channel.
+- The frontend can list owned uploads.
+- Shorts are detected and excluded from diagnosis creation.
+- Creating an analysis run persists a row with `queued` or `running` status and returns an `analysis_run_id`.
+- Retrying a failed analysis run creates a new row with `parent_analysis_run_id`.
+- Refreshing or revising with manual context creates a new linked row with the appropriate `run_reason`.
+- Tests mock Google and YouTube providers.
 
-## Phase 3 — Product UI
+## Milestone 2: Analysis Snapshot Foundation
 
-### Milestones
+### Scope
 
-- Improve side-by-side video cards with clearer metrics and unavailable states.
-- Add citation chips that map to metadata or chunk sources.
-- Add suggested questions for the required demo prompts.
-- Add polished loading, progress, empty, and failure states.
-- Make the demo path fast and obvious.
-
-### Acceptance Criteria
-
-- A reviewer can run the demo without guessing the next action.
-- Failure states explain platform/caption/download problems clearly.
-- Citations are visible and readable without opening dev tools.
-
-## Phase 4 — Resilience and Demo Readiness
-
-### Milestones
-
-- Add provider-mocked smoke tests.
-- Add root `Makefile` targets for backend lint/tests, frontend lint/typecheck/build, markdown lint, and mocked smoke tests.
-- Add pre-commit, Ruff, Pytest, markdown lint, PR template, and GitHub Actions CI.
-- Keep required CI provider-mocked only; real Groq, Qdrant Cloud, Neon, YouTube, and Instagram checks stay manual or nightly.
-- Add backend Docker deployment support for Render with documented CORS/frontend env pairing.
-- Finalize README, architecture notes, cost/scaling notes, and Loom script.
-- Run clean-clone demo rehearsal before recording.
+- Fetch selected video metadata.
+- Fetch transcript through existing YouTube transcript path or Groq Whisper fallback.
+- Retry transcript acquisition with bounded retry policy and support optional manual transcript/script evidence.
+- Fetch private analytics needed for first diagnosis.
+- Select baseline videos from the authenticated channel.
+- Store immutable analysis snapshots.
+- Store optional manual metrics and user context separately from platform analytics.
+- Move vector payloads from `session_id` to `analysis_run_id`.
 
 ### Acceptance Criteria
 
-- Clean clone can install, configure env, and run.
-- Mocked tests pass without paid providers.
-- CI runs backend lint, backend tests, frontend lint, frontend typecheck, frontend build, markdown lint, and mocked smoke tests.
-- Backend can be built from `backend/Dockerfile` for Render and binds to the Render `PORT` value.
-- Hosted frontend/backend deployments can be connected with `NEXT_PUBLIC_API_BASE` and `CORS_ORIGINS` without CORS errors.
-- Loom script explains cost, scaling, quality tradeoffs, and fallback paths.
-- Final demo has no known blocking bugs.
+- The system can create a completed analysis snapshot without generating a final diagnosis.
+- Baseline membership is stored and inspectable.
+- Baseline uses the first 7 completed days by default and marks early-read runs.
+- Transcript chunks are tied to `analysis_run_id`.
+- Missing transcripts degrade content confidence without blocking analytics snapshots.
+- Provider-mocked tests cover video metadata, analytics snapshots, transcript fallback, and baseline selection.
+
+## Milestone 3: Deterministic Diagnosis Engine
+
+### Scope
+
+- Implement retention-to-transcript mapping.
+- Implement candidate bottleneck scoring.
+- Implement contradiction checks.
+- Implement evidence gate.
+- Store both numeric confidence score and user-facing confidence label.
+- Emit deterministic diagnosis JSON.
+- Add insufficient-evidence output shape.
+
+### Acceptance Criteria
+
+- The engine refuses to name a primary bottleneck when evidence is insufficient.
+- Fewer than 5 comparable prior long-form baseline videos prevents confident primary-bottleneck diagnosis.
+- Hook and pacing diagnoses require retention curve or equivalent manual retention evidence.
+- Packaging cannot be high-confidence primary without CTR/impression or equivalent click-opportunity evidence.
+- Packaging analysis does not include automated thumbnail vision in MVP.
+- Engagement diagnosis uses opportunity-normalized metrics.
+- Hook, pacing, packaging, engagement, topic-audience, and distribution hypotheses have explicit evidence and limitations.
+- Unit tests cover evidence thresholds, confidence, and no-slop behavior.
+
+## Milestone 4: Audience Signals Agent
+
+### Scope
+
+- Fetch capped YouTube comment threads.
+- Store raw comment samples tied to analysis runs.
+- Extract timestamp mentions.
+- Map timestamp reactions to transcript and retention intervals.
+- Cluster comment themes and viewer language into compact JSON.
+
+### Acceptance Criteria
+
+- Raw comment text does not bloat the main diagnosis prompt.
+- The agent returns compact structured evidence.
+- Comments are treated as supporting evidence with sample-size limitations.
+- Tests cover timestamp extraction and output shape.
+
+## Milestone 5: Report-First UI And Coach LLM
+
+### Scope
+
+- Generate report prose from deterministic diagnosis JSON.
+- Build report page sections:
+  - summary;
+  - evidence quality;
+  - funnel diagnosis;
+  - main bottleneck or insufficient evidence;
+  - baseline comparison;
+  - likely causes;
+  - what to focus on;
+  - what to ignore;
+  - next-video plan;
+  - hook/title/structure rewrites.
+- Render timestamped evidence cards with embedded YouTube player seek actions.
+- Validate strict report JSON and machine-readable citations before display.
+- Add deterministic fallback report when LLM report validation fails.
+- Add lightweight report feedback capture tied to `analysis_run_id`.
+- Add grounded follow-up chat attached to the report.
+
+### Acceptance Criteria
+
+- The app opens into an actual analysis workflow, not an empty chatbot.
+- The report never invents analytics.
+- Every factual claim cites stored evidence.
+- Invalid report JSON or citations are rejected before display.
+- Report feedback records usefulness, perceived accuracy against YouTube Studio, optional notes, and copied-output events without mutating the diagnosis.
+- Follow-up answers cite stored analysis evidence.
+- Missing data prompts are targeted and actionable.
+
+## Milestone 6: Reliability, Privacy, And Demo Readiness
+
+### Scope
+
+- Add disconnect and delete-analysis-data verification.
+- Add provider-mocked CI coverage for the full analysis skeleton.
+- Add docs for OAuth setup and local development.
+- Remove or isolate old YouTube/Instagram comparison routes and UI.
+- Rehearse private-test demo.
+
+### Acceptance Criteria
+
+- `make ci` passes without real Google, YouTube, Groq, Qdrant, or Neon credentials.
+- OAuth secrets are never logged.
+- Data deletion removes snapshots, comments, reports, vectors, and follow-ups.
+- Demo flow is stable for an allowlisted creator account.

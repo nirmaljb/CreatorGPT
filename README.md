@@ -1,298 +1,246 @@
-# Creator Video RAG Comparator
+# YouTube Video Performance Diagnosis Tool
 
-## Project overview
+## Project Overview
 
-This app compares one YouTube video and one Instagram Reel. It extracts metadata, gets transcripts, stores searchable transcript chunks, and answers questions in a streaming chat UI with citations.
+This product helps serious YouTube creators understand why one of their videos underperformed and what to change in the next upload.
 
-The goal is simple: help a user understand why two creator videos performed differently, using real metadata and transcript evidence instead of invented facts.
+The app is not a generic video chatbot. It is a report-first post-mortem system:
 
-Development is tracked in phases so reviewers can see what was built first, what is being improved now, and what remains:
+1. The creator connects YouTube.
+2. The creator selects one owned video.
+3. The system builds a channel-relative analysis snapshot.
+4. The system generates an evidence-backed diagnosis report.
+5. Follow-up chat is available only after the report exists.
 
-- [Phase 1: Thin Vertical Slice](docs/phase/phase-1.md)
-- [Phase 2: Grounded Intelligence](docs/phase/phase-2.md)
-- [Phase 3: Product UI](docs/phase/phase-3.md)
-- [Phase 4: Resilience and Demo Readiness](docs/phase/phase-4.md)
+The core product promise is reliability. If the data is insufficient to name a primary bottleneck, the product should say that clearly and ask for the specific missing context instead of producing a weak answer.
 
-Leave space here for the demo media:
+## Product Documents
 
-<!-- Demo GIF or video placeholder -->
+| Document | Purpose |
+| --- | --- |
+| [Product Spec](.codex/PRODUCT_SPEC.md) | Product scope, MVP requirements, diagnosis framework, and long-term direction |
+| [Architecture](.codex/ARCHITECTURE.md) | OAuth, analysis runs, analyzers, schema, API direction, and evidence gates |
+| [Plans](.codex/PLANS.md) | Pivot milestones and acceptance criteria |
+| [Progress](.codex/Progress.md) | Current status, completed chunks, next step, and known issues |
+| [Agent Notes](AGENTS.md) | Developer workflow, product decisions, security rules, and implementation constraints |
 
-### Project documents
+## Current Pivot
 
-| Document | What It Explains | Best For |
-| --- | --- | --- |
-| [Product Spec](.codex/PRODUCT_SPEC.md) | Product goal, user needs, and expected behavior | Product reviewers |
-| [Architecture](.codex/ARCHITECTURE.md) | System design, API flow, database tables, and quality gates | Engineers |
-| [Plans](.codex/PLANS.md) | Phase milestones and acceptance criteria | Reviewers and maintainers |
-| [Progress](.codex/Progress.md) | Work completed, checks run, and current next steps | Anyone tracking status |
-| [Installation](docs/installation.md) | Setup, environment variables, local run commands, and Render deployment | Developers running the app |
-| [FAQ](docs/FAQ.md) | Common architecture, correctness, cost, scale, and demo-risk questions | Demo rehearsal |
-| [Phase 1](docs/phase/phase-1.md) | Thin vertical slice scope and flow | Demo setup |
-| [Phase 2](docs/phase/phase-2.md) | Grounded intelligence and eval scope | RAG quality work |
-| [Phase 3](docs/phase/phase-3.md) | Product UI scope | Frontend polish |
-| [Phase 4](docs/phase/phase-4.md) | CI, smoke tests, and demo readiness | Release readiness |
-| [Agent Notes](AGENTS.md) | Developer workflow and important project decisions | Contributors |
+This branch pivots away from the previous YouTube/Instagram two-video comparison demo.
 
-## Features
+What stays useful:
 
-- Ingests two video URLs in one session.
-- Supports YouTube and Instagram video slots.
-- Returns a `session_id` immediately from ingestion.
-- Stores video metadata and raw extractor metadata in Postgres.
-- Uses YouTube captions first when they are available.
-- Uses Groq `whisper-large-v3` for hosted transcription when captions are unavailable.
-- Chunks transcripts and stores vectors in Qdrant.
-- Streams chat answers with source citations.
-- Routes numeric questions to Postgres metadata instead of vector search.
-- Routes transcript questions to Qdrant retrieval.
-- Uses balanced retrieval for comparison questions so both videos are represented.
-- Includes evals for the assignment questions and harder edge cases.
-- Includes provider-mocked CI so regular checks do not need real Groq, Neon, Qdrant, YouTube, or Instagram access.
+- FastAPI backend.
+- Next.js frontend.
+- Postgres storage.
+- Qdrant vector search.
+- Groq chat and Whisper wrappers.
+- YouTube transcript fast path.
+- `yt-dlp` and `ffmpeg` media extraction.
+- Structured errors, progress states, and provider-mocked CI patterns.
+
+What changes:
+
+- One authenticated YouTube creator instead of generic public URLs.
+- One selected owned YouTube video instead of Video A/Video B comparison.
+- Long-form-only MVP diagnosis; Shorts are detected and excluded for now.
+- Report-first workflow instead of chatbot-first workflow.
+- `analysis_run` as the product object instead of `session_id`.
+- Private YouTube Analytics and channel baseline as first-class evidence.
+- Deterministic evidence gates before the LLM writes a diagnosis.
+- Audience comment analysis as a bounded sub-agent.
+
+## MVP Goal
+
+Build an OAuth-connected YouTube diagnosis flow where a creator selects one underperforming owned video and receives a structured report explaining:
+
+- where the video likely lost momentum;
+- what evidence supports that conclusion;
+- how confident the system is;
+- what data is missing, if any;
+- what to focus on next;
+- what to ignore;
+- how to improve the next upload.
+
+## MVP Must-Haves
+
+- Google/YouTube OAuth login.
+- Read-only YouTube and YouTube Analytics scopes.
+- Encrypted refresh-token storage.
+- Connected channel identity.
+- Owned video selection.
+- Manual video selection without channel-wide underperformer scanning.
+- Shorts exclusion for MVP diagnosis.
+- Analysis-run creation.
+- FastAPI background-task analysis execution with explicit run statuses.
+- Linked retry for failed analysis runs.
+- Linked refresh and manual-context revision runs.
+- Private analytics snapshot.
+- First-7-day channel-relative baseline.
+- Transcript ingestion and timestamped chunks.
+- Comment analysis through an Audience Signals Agent.
+- Retention-to-transcript mapping.
+- Deterministic diagnosis JSON.
+- Evidence gate and insufficient-evidence state.
+- Structured report.
+- Lightweight report feedback tied to each analysis run.
+- Grounded follow-up chat attached to the report.
+- Disconnect and delete-analysis-data paths.
+- Provider-mocked tests.
+
+## What The Product Must Avoid
+
+- Instagram or multi-platform support in MVP.
+- Generic chatbot-first UI.
+- Automated thumbnail vision analysis in MVP.
+- Unsupported claims about YouTube's algorithm.
+- Invented CTR, impressions, retention, or private analytics.
+- Naming a primary bottleneck when evidence is insufficient.
+- Storing unlimited channel analytics data.
+- Requesting write/manage YouTube scopes.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    user["User enters YouTube and Instagram URLs"]
-    frontend["Next.js frontend"]
-    ingest["POST /ingest"]
-    limits["Backpressure checks"]
-    session["Create Postgres session"]
-    metadata["Extract and store metadata"]
-    transcript{"Transcript path"}
-    captions["YouTube captions"]
-    whisper["Groq Whisper transcription"]
-    chunks["Chunk transcript text"]
-    embed["Embed chunks with FastEmbed"]
-    qdrant["Store chunks in Qdrant"]
-    status["GET /status by session_id"]
-    chat["POST /chat"]
-    router{"Question route"}
-    pg["Postgres metadata tools"]
-    retrieve["Qdrant retrieval policies"]
-    llm["Groq chat model"]
-    answer["Stream cited answer"]
+    user["Creator"] --> auth["Connect YouTube"]
+    auth --> channel["Fetch authenticated channel"]
+    channel --> owned["List owned uploads"]
+    owned --> selected["Select one video"]
+    selected --> run["Create analysis_run"]
+    run --> job["Background analysis job"]
 
-    user --> frontend --> ingest --> limits --> session --> metadata --> transcript
-    transcript -->|Captions available| captions
-    transcript -->|Captions unavailable or Instagram| whisper
-    captions --> chunks
-    whisper --> chunks
-    chunks --> embed --> qdrant
-    frontend --> status
-    frontend --> chat --> router
-    router -->|Numeric or creator question| pg
-    router -->|Transcript question| retrieve
-    router -->|Mixed comparison| pg
-    router -->|Mixed comparison| retrieve
-    pg --> llm
-    retrieve --> llm
-    llm --> answer --> frontend
+    job --> ytdata["YouTube Data API"]
+    job --> ytanalytics["YouTube Analytics API"]
+    job --> transcript["Transcript or Whisper"]
+    job --> comments["Audience Signals Agent"]
+    job --> packaging["Packaging Analyzer"]
+    job --> baseline["Baseline Builder"]
+
+    ytanalytics --> diagnosis["Diagnosis Orchestrator"]
+    transcript --> diagnosis
+    comments --> diagnosis
+    packaging --> diagnosis
+    baseline --> diagnosis
+
+    diagnosis --> gate{"Evidence sufficient?"}
+    gate -->|Yes| report["Primary diagnosis report"]
+    gate -->|No| gaps["Insufficient-evidence report"]
+
+    report --> followup["Grounded follow-up chat"]
+    gaps --> followup
 ```
 
-The app does not silently fall back to fake data. If a provider fails, the session or video should show a clear error.
+## Diagnosis Model
 
-Detailed Phase 1 pipeline diagrams are maintained here:
-
-- [Ingestion pipeline](docs/phase/phase-1.md#ingest-flow)
-- [Status pipeline](docs/phase/phase-1.md#status-flow)
-- [Chat pipeline](docs/phase/phase-1.md#chat-flow)
-
-## Tech stack
-
-| Area | Technology | Purpose |
-| --- | --- | --- |
-| Frontend | Next.js, React, TypeScript | Video inputs, status display, runtime limits, and chat UI |
-| Backend API | FastAPI | Ingest, status, messages, health, config, and chat endpoints |
-| Orchestration | LangGraph | Routes each question to metadata, transcript search, or both |
-| Chat model | Groq `llama-3.3-70b-versatile` | Streams final chat answers |
-| Transcription | Groq `whisper-large-v3` | Creates transcripts when captions are unavailable |
-| YouTube captions | `youtube-transcript-api` | Fast transcript path for YouTube videos with captions |
-| Media extraction | `yt-dlp`, `ffmpeg` | Reads video metadata and downloads temporary audio, with optional cookie auth |
-| Embeddings | FastEmbed `BAAI/bge-small-en-v1.5` | Converts transcript chunks into vectors |
-| Vector database | Qdrant Cloud | Stores and searches transcript chunks |
-| Relational database | Neon Postgres | Stores sessions, video metadata, raw metadata, cache, chat history, and usage ledger |
-| Backend tests | Pytest | Runs unit and mocked smoke tests |
-| Backend lint | Ruff | Checks and formats Python code |
-| Frontend checks | ESLint, TypeScript, Next build | Checks frontend code and production build |
-| Markdown checks | markdownlint | Keeps documentation readable and consistent |
-| CI | GitHub Actions | Runs lint, tests, build, markdown lint, and mocked smoke test |
-| Deployment | Docker, Render | Builds the backend with system media tools and deploys it as a web service |
-
-## Setup
-
-Use [docs/installation.md](docs/installation.md) for the full setup guide, including system tools, dependency installation, `.env` setup, Render backend deployment, and Docker commands.
-
-## Demo flow
-
-Small demo flow:
+The system follows:
 
 ```text
-YouTube URL + Instagram Reel URL
-  -> POST /ingest returns session_id immediately
-  -> GET /status/{session_id} reaches completed
-  -> POST /chat streams an answer
-  -> answer includes metadata and transcript citations
+Signal -> Evidence -> Interpretation -> Confidence -> Action
 ```
 
-Manual demo steps:
+Deterministic analyzers own:
 
-1. Start the backend and frontend.
-2. Enter one YouTube URL and one Instagram Reel URL.
-3. Confirm ingestion reaches `completed`.
-4. Ask: `What's the engagement rate of each?`
-5. Confirm the answer cites `[Video A metadata]` and `[Video B metadata]`.
-6. Ask: `Compare the hooks in the first 5 seconds.`
-7. Confirm the answer cites only early transcript chunks.
+- metric normalization;
+- baseline selection;
+- trend analysis;
+- retention-to-transcript mapping;
+- comment timestamp extraction;
+- candidate bottleneck scoring;
+- contradiction checks;
+- evidence gates.
 
-Run assignment evals after a real session is completed:
+The LLM owns:
 
-```bash
-backend/.venv/bin/python scripts/eval_assignment_questions.py \
-  --api-base http://127.0.0.1:8000 \
-  --session-id <completed-session-id>
-```
+- creator-friendly explanation;
+- coaching;
+- hook and title rewrites;
+- next-video planning;
+- grounded follow-up responses.
 
-The eval asks the assignment questions plus harder stats, vague, creative, open-ended, multi-step, and incorrect-premise questions.
+The LLM does not get to invent analytics or choose the primary bottleneck from scratch.
 
-## API endpoints
+## Evidence Gate
+
+A primary bottleneck can be named only when the run has:
+
+- one authenticated analytics signal;
+- at least 5 comparable prior long-form videos in a same-window channel-baseline comparison;
+- one content or audience signal;
+- one candidate bottleneck materially stronger than alternatives;
+- one contradiction check;
+- confidence tied to data completeness.
+
+If that bar is not met, the report should rank hypotheses, show missing data, and ask targeted questions.
+
+Every factual report claim must cite stored evidence. Invalid report JSON or invalid machine-readable citations should be rejected before display.
+
+## Expected API Direction
+
+New product endpoints should target analysis runs:
 
 | Endpoint | Purpose |
 | --- | --- |
-| `GET /health` | Checks API, Postgres, and Qdrant availability |
-| `GET /config` | Returns runtime backpressure limits for the frontend |
-| `POST /ingest` | Starts ingestion and returns `session_id` immediately |
-| `GET /status/{session_id}` | Returns session progress, terminal state, and video metadata |
-| `GET /messages/{session_id}` | Returns recent persisted chat messages |
-| `POST /chat` | Streams a cited answer with SSE events |
+| `GET /auth/google/start` | Start Google OAuth |
+| `GET /auth/google/callback` | Complete OAuth callback |
+| `GET /me` | Return current user and connected channel state |
+| `POST /youtube/disconnect` | Disconnect YouTube and remove stored token access |
+| `DELETE /me/analysis-data` | Delete stored analysis data |
+| `GET /youtube/channels` | List connected channels |
+| `GET /youtube/videos` | List owned uploads |
+| `POST /analysis-runs` | Create and start a background analysis run |
+| `GET /analysis-runs/{id}` | Read run status and progress |
+| `GET /analysis-runs/{id}/report` | Read generated report |
+| `POST /analysis-runs/{id}/followups` | Ask grounded follow-up questions |
 
-`POST /ingest` accepts two generic video slots. The assignment demo normally uses Video A as YouTube and Video B as Instagram, but each slot can be marked as either platform.
+Legacy comparison endpoints may remain temporarily during migration, but new work should not extend them.
 
-`POST /chat` streams events for answer tokens, sources, route information, retrieval policy, completion, and errors.
+## Development Setup
 
-## RAG design
+The old local setup still mostly applies until the pivot implementation updates dependencies and environment variables.
 
-```mermaid
-flowchart TD
-    question["User question"] --> router["Rules-first LangGraph router"]
+Expected future environment variables:
 
-    router -->|Numeric or creator facts| metadata["METADATA_ONLY"]
-    router -->|Semantic transcript question| transcript["TRANSCRIPT_ONLY"]
-    router -->|First 5 seconds or opening| hook["HOOK_COMPARISON"]
-    router -->|Performance explanation| mixed["MIXED_COMPARISON"]
-    router -->|Advice for Video B| improve["IMPROVEMENT_SUGGESTION"]
-    router -->|Short follow-up| followup["FOLLOW_UP"]
-
-    followup --> router
-    metadata --> pg["Postgres metadata tools"]
-    transcript --> qdrant["Qdrant transcript retrieval"]
-    hook --> hookChunks["Qdrant hook chunks"]
-    mixed --> pg
-    mixed --> balanced["Balanced A and B retrieval"]
-    improve --> pg
-    improve --> balanced
-
-    pg --> prompt["Grounded prompt"]
-    qdrant --> prompt
-    hookChunks --> prompt
-    balanced --> prompt
-    prompt --> llm["Groq streaming chat"]
-    llm --> answer["Answer with exact citations"]
+```text
+DATABASE_URL=
+QDRANT_URL=
+QDRANT_API_KEY=
+GROQ_API_KEY=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_OAUTH_REDIRECT_URI=
+OAUTH_TOKEN_ENCRYPTION_KEY=
 ```
 
-The system does not let the vector database answer numeric or creator metadata questions. Those questions use typed Postgres tools:
+OAuth development should use Google Cloud OAuth Testing mode with allowlisted test users.
 
-- `get_video_metrics(session_id: str)`
-- `get_creator_info(session_id: str, video_id: str)`
-- `get_engagement_comparison(session_id: str)`
-- `get_session_video_summary(session_id: str)`
+## First Implementation Milestone
 
-Question routes:
+Build the OAuth-connected analysis skeleton:
 
-| Route | Used For | Evidence Source |
-| --- | --- | --- |
-| `METADATA_ONLY` | Engagement rate, views, likes, comments, creator, follower count | Postgres metadata only |
-| `TRANSCRIPT_ONLY` | Semantic questions about what a video says | Qdrant transcript chunks |
-| `HOOK_COMPARISON` | First 5 seconds or opening hook questions | Qdrant chunks where `is_hook=true` |
-| `MIXED_COMPARISON` | Performance explanations and A/B comparisons | Postgres metadata plus balanced transcript retrieval |
-| `IMPROVEMENT_SUGGESTION` | Advice for improving Video B based on Video A | Metadata plus A and B transcript evidence |
-| `FOLLOW_UP` | Short follow-up questions | Recent chat context, then re-routed |
+1. Add Alembic.
+2. Add `users`, `youtube_channels`, `oauth_tokens`, and `analysis_runs`.
+3. Implement Google OAuth start/callback.
+4. Store encrypted refresh tokens server-side.
+5. Add `GET /me`.
+6. Add `POST /youtube/disconnect`.
+7. Fetch authenticated channel identity.
+8. Fetch owned uploads through provider wrappers.
+9. Add a minimal frontend flow:
+   - Connect YouTube;
+   - select owned video;
+   - create analysis run.
 
-Retrieval policies:
+Full diagnosis comes after this foundation is working.
 
-| Policy | Behavior |
-| --- | --- |
-| `hook_retrieval` | Filters by session and hook chunks |
-| `video_a_retrieval` | Retrieves chunks only from Video A |
-| `video_b_retrieval` | Retrieves chunks only from Video B |
-| `comparison_retrieval` | Retrieves from Video A and Video B separately, then merges context |
-| `metadata_augmented_retrieval` | Combines metadata tools with transcript chunks |
+## Quality Bar
 
-Comparison routes do not use one global `top_k=8` search. They retrieve from Video A and Video B separately so one video does not crowd out the other.
+The product is only valuable if creators trust it. The system should:
 
-Citation format:
-
-| Source Type | Example |
-| --- | --- |
-| Metadata | `[Video A metadata]` |
-| Transcript chunk | `[Video A, chunk 3, 00:12-00:27]` |
-
-## Cost and scalability
-
-The app keeps a simple internal usage ledger per session. It tracks:
-
-- `session_id`
-- video count
-- transcribed seconds
-- transcript source rollup
-- chunk count
-- embedding count
-- chat prompt tokens
-- chat completion tokens
-- LLM model
-- embedding model
-- cache hits
-- cache misses
-- creation time
-
-The main cost drivers are Groq chat tokens, Groq Whisper seconds, Qdrant storage/search, and Postgres storage. YouTube captions are cheaper than Whisper because captions avoid audio transcription.
-
-Demo safeguards are already in place:
-
-- concurrent ingestion limit
-- per-IP hourly session limit
-- maximum Whisper/audio window
-- maximum chunks per video
-- maximum retrieved chunks
-- maximum chat history messages
-- extraction cache for repeat demos
-
-These safeguards are process-local and suitable for the demo. A production deployment should use distributed rate limiting and durable job coordination.
-
-## Known limitations
-
-See [docs/FAQ.md](docs/FAQ.md) for plain-English answers about why these limitations exist and how they affect the demo.
-
-- Instagram extraction may require cookies depending on account/video availability.
-- Some YouTube videos may require `YTDLP_COOKIES_PATH` when YouTube returns a sign-in or bot-check challenge.
-- Some platforms do not expose follower count/views consistently.
-- FastAPI background tasks are used for the demo; production should use a durable queue.
-- Raw audio is temporary and deleted after transcription.
-- Instagram metadata can be incomplete even when likes, comments, or captions are available.
-- Engagement-rate comparison is incomplete when a video's view count is unavailable.
-- The current retry behavior is intentionally minimal. Failed ingestion should be started again with a new session.
-- The current router is rules-first for determinism. It may need an LLM classifier if future evals show that rules miss important phrasing.
-
-## Future production improvements
-
-See [docs/FAQ.md](docs/FAQ.md) for more detail on the production path, especially queueing, cost controls, and scaling beyond the demo.
-
-- Move ingestion from FastAPI background tasks to a durable queue.
-- Add explicit retry controls for failed videos and failed sessions.
-- Add user accounts and authorization.
-- Add provider health dashboards and alerting.
-- Add nightly real-provider evals for Groq, Qdrant Cloud, Neon, YouTube, and Instagram.
-- Add Alembic migrations once schema churn increases.
-- Add distributed rate limiting for multi-instance deployments.
-- Add reranking or hybrid search only after evals show a retrieval quality gap.
-- Add richer frontend evidence views for citations and transcript snippets.
+- cite evidence;
+- expose uncertainty;
+- ask when data is missing;
+- distinguish deterministic findings from coaching suggestions;
+- avoid broad generic advice;
+- keep private analytics secure;
+- keep tests provider-mocked by default.

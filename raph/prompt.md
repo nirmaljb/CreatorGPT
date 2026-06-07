@@ -33,6 +33,7 @@ Explore the repo.
 # IMPLEMENTATION
 
 Use /tdd to complete the task.
+For implementing the frontend look into /web-design-guidelines and /frontend-design skills to generate usable and aesthetically pleasing site.
 
 # FEEDBACK LOOPS
 

@@ -2,264 +2,136 @@
 
 ## Current Phase
 
-Phase 2 implementation.
+Pivot planning and documentation reset.
 
 ## Current Status
 
-- Repository initialized on `main`.
-- Planning decisions recorded in `.codex/Agents.md`.
-- Backend and frontend Phase 1 implementation files have been added and lightweight checks pass.
-- Backend dev server is running at `http://127.0.0.1:8000`.
-- Fresh backend dev server with the latest ingestion changes is running at `http://127.0.0.1:8001`.
-- Frontend dev server is running at `http://localhost:3001` because port 3000 is already occupied locally.
-- Live ingest and chat smoke tests pass after the YouTube transcript fast-path and async ingestion changes.
-- Project docs have been moved under `.codex/`.
-- Phase documentation is tracked under `docs/phase/`; Phase 1 now includes high-level Mermaid flow diagrams.
-- Phase 2 router implementation is in progress with explicit route labels, rules-first classification, named retrieval policies, and route-aware assignment evals.
+- The project has pivoted from the old YouTube/Instagram comparison RAG demo to an OAuth-connected YouTube performance diagnosis product.
+- The active branch is `postmortom`.
+- The new product is report-first, not chatbot-first.
+- The central product object is now planned as `analysis_run`, not `session_id`.
+- YouTube OAuth is required for MVP because reliable diagnosis depends on authenticated creator analytics.
+- The system must analyze first and ask the user targeted questions only when evidence is insufficient.
 
 ## Completed Chunks
 
-- Created implementation plan.
-- Locked Phase 1 provider choices: Groq chat and FastEmbed/BGE embeddings.
-- Added `.env.example`, `.gitignore`, `README.md`, backend dependencies, package scaffolding, settings, SQLAlchemy models, Postgres helpers, and Qdrant/FastEmbed helpers.
-- Added ingestion modules for metadata scraping, audio download, faster-whisper transcription, transcript chunking, and end-to-end ingestion status updates.
-- Added LangGraph retrieval flow, prompt construction, Groq streaming client, SSE response service, and FastAPI endpoints for health, ingest, status, messages, and chat.
-- Added Next.js app with URL ingestion form, status polling, persisted session reload, side-by-side video metadata panels, chat UI, streaming SSE parsing, and source tags.
-- Installed frontend dependencies and generated `frontend/package-lock.json`.
-- Installed backend dependencies in `backend/.venv`.
-- Fixed Next.js workspace-root warning by setting `outputFileTracingRoot`.
-- Adjusted prompt formatting so missing follower counts are exposed as `unavailable` instead of `0`.
-- Replaced fixed YouTube/Instagram frontend inputs with two video slots, each with a YouTube/Instagram selector.
-- Updated `/ingest` to accept `videos: [{ video_id, platform, url }]` while keeping the old `youtube_url`/`instagram_url` payload compatible.
-- Changed long-video handling from hard failure to first-window trimming based on `MAX_VIDEO_SECONDS`.
-- Changed ingestion to scrape/store metadata for both videos before starting audio download/transcription.
-- Added structured console logging across startup, metadata scraping, audio download, transcription, chunking, Qdrant upsert, retrieval, and failures.
-- Added Qdrant collection dimension validation during startup.
-- Expanded development CORS defaults to allow local frontend ports 3000 and 3001.
-- Added persisted session progress fields: `current_step` and `progress_percent`.
-- Updated ingestion to write progress at metadata, download, transcription, chunking, embedding, finished-video, ready, and failure stages.
-- Updated frontend status display with a progress bar and adaptive polling delays instead of fixed 2.5-second polling.
-- Added `youtube-transcript-api` as a backend dependency.
-- Added YouTube video ID extraction and caption fast-path with Whisper fallback.
-- Refactored ingestion so per-video transcript/vector work runs concurrently after the metadata pass.
-- Added transcript source tags into Qdrant chunk payloads and prompt context.
-- Moved default runtime audio outside the repo and redirected legacy `TMP_DIR=tmp` to `/private/tmp/creator-rag`.
-- Added Qdrant payload index creation for `session_id`, `video_id`, and `is_hook`.
-- Moved root `AGENT.md` to `.codex/Agents.md`.
-- Moved root `Progress.md` to `.codex/Progress.md`.
-- Added `.codex/PRODUCT_SPEC.md`, `.codex/ARCHITECTURE.md`, and `.codex/PLANS.md`.
-- Added the revised Phase 0-4 plan to `.codex/Agents.md` and expanded phase milestones with acceptance criteria in `.codex/PLANS.md`.
-- Added scope-only docs for Phase 1 through Phase 4 under `docs/phase/`.
-- Updated `.codex/Agents.md` workflow so phase docs start with scope and gain technologies, flow, components, and tradeoffs as each phase progresses.
-- Updated `docs/phase/phase-1.md` so the user flow, ingest/status/chat flow, and component flow are represented as high-level Mermaid diagrams instead of ordered flow lists.
-- Confirmed a live mixed YouTube + Instagram Reel ingest returns `session_id` immediately, stores both metadata rows, reaches terminal status, and streams a cited chat response.
-- Added Postgres-backed extraction cache support keyed by platform, URL, cache version, and `MAX_VIDEO_SECONDS`, with `FORCE_REFRESH=true` to bypass cache reads.
-- Added platform-specific extractor classes for YouTube and Instagram so captions/Whisper behavior is explicit per platform.
-- Added per-video ingestion diagnostics in Postgres and status responses: `ingest_status`, `video_error_message`, `transcript_source`, `chunk_count`, cache flags, and raw-metadata presence.
-- Added raw `yt-dlp` metadata storage on video metadata rows and extraction cache entries.
-- Updated the terminal ingest session status to `completed` while keeping `/chat` compatible with older `ready` sessions.
-- Fixed compare-query retrieval so questions mentioning both Video A and Video B retrieve transcript chunks from both videos instead of filtering to Video A.
-- Added typed Postgres metadata tools for video metrics, creator info, engagement comparison, and session video summaries.
-- Added question routing so numeric/creator/metadata questions bypass Qdrant retrieval, semantic transcript questions retrieve from Qdrant, and mixed comparison questions use both metadata tools and Qdrant.
-- Changed YouTube caption ingestion so captions are uncapped by `MAX_VIDEO_SECONDS`; videos longer than 10 minutes can ingest when captions are available, while audio/Whisper fallback remains capped.
-- Bumped extraction cache version for transcript provider changes so older capped-caption cache entries are not reused.
-- Replaced local `faster-whisper` transcription with Groq `whisper-large-v3` transcription and removed the local dependency/config.
-- Bumped extraction cache version to `extract-v3` so older local-Whisper transcript cache entries are not reused.
-- Added `scripts/eval_assignment_questions.py`, a small assignment eval runner that asks the five required demo questions against a completed session through the streaming `/chat` API.
-- Added reusable eval logic in `backend.evals.assignment_eval` for later mocked CI coverage.
-- Added eval validation for streaming success, non-empty cited answers, source routing, Postgres-backed numeric values, unavailable missing follower counts, early hook chunks, and mixed comparison transcript evidence from both videos.
-- Tightened Video A/B routing detection so "Suggest improvements for B based on what worked in A" is treated as a mixed comparison and retrieves chunks for both videos.
-- Documented the assignment eval command in `README.md` and `docs/phase/phase-2.md`, and recorded the eval-first workflow in `AGENTS.md` and `.codex/PLANS.md`.
-- Added a root `Makefile` with CI-equivalent targets for backend lint/tests, frontend lint/typecheck/build, markdown lint, and a mocked smoke test.
-- Added backend dev tooling config: `backend/requirements-dev.txt`, `pyproject.toml` for Pytest/Ruff, and `.pre-commit-config.yaml` local hooks.
-- Added frontend ESLint and markdown lint dependencies/config, plus `lint`, `typecheck`, and `lint:md` scripts.
-- Added `.github/workflows/ci.yml` and `.github/pull_request_template.md` so required CI is provider-mocked and does not require Groq, Qdrant Cloud, Neon, YouTube, or Instagram.
-- Added `backend/tests/test_mocked_smoke.py` to patch API dependencies and verify ingest -> status -> streamed chat without external providers.
-- Reworked `README.md` into a cleaner project entry point with a demo placeholder, documentation map, technology table, high-level pipeline, installation guide, checks, and eval commands.
-- Changed the README high-level pipeline from an ordered list to a Mermaid flowchart.
-- Fixed the README Mermaid diagram by quoting labels that contain braces and HTML line breaks so GitHub can render it.
-- Fixed the assignment eval failure where the "why did A get more engagement" answer could use retrieved chunks as hidden context but cite only metadata.
-- Added mixed-route prompt requirements so comparison answers cite transcript chunks when chunks are retrieved.
-- Added metric availability flags derived from raw metadata so missing Instagram views, engagement rates, and follower counts are shown as `unavailable` instead of being treated as real zeroes.
-- Updated metadata tools, prompt context, eval validation, and frontend metric cards to respect unavailable extractor counts.
-- Updated engagement comparison metadata so a missing view denominator marks the comparison incomplete instead of declaring Video A the winner.
-- Tightened eval validation so unavailable Video B views or engagement cannot pass as `0 views` or `0%`.
-- Tightened citation formatting so prompts and evals require exact source tags instead of wrapper citations like `[source_tag: [Video A metadata]]` or fake tags like `[POSTGRES METADATA TOOL RESULTS]`.
-- Added a Phase 1 stale-ingest guard: `/status/{session_id}` marks old `processing` sessions as `failed` after `INGEST_STALE_SECONDS` and marks non-terminal video rows failed.
-- Changed the frontend refresh behavior so it clears the old localStorage session key and starts from a clean UI state instead of restoring a previous stuck session.
-- Added frontend offline/API-unreachable handling so status polling pauses with a connection message and resumes loading when the browser reports it is online again.
-- Documented the no-retry Phase 1 tradeoff and future explicit retry direction in `AGENTS.md`, `.codex/ARCHITECTURE.md`, `.codex/PLANS.md`, and `docs/phase/phase-1.md`.
-- Corrected the `AGENTS.md` operating workflow to point future agents at the existing root `AGENTS.md` file plus `.codex/Progress.md`.
-- Added the Phase 2 rules-first LangGraph router with explicit `METADATA_ONLY`, `TRANSCRIPT_ONLY`, `HOOK_COMPARISON`, `MIXED_COMPARISON`, `IMPROVEMENT_SUGGESTION`, and `FOLLOW_UP` routes.
-- Changed the RAG graph from a mostly linear flow to conditional routing: metadata-only paths end after typed Postgres tools, hook paths retrieve `is_hook=true` chunks, and mixed/improvement paths combine metadata tools with transcript retrieval.
-- Added minimal follow-up resolution for obvious video references such as "their", "that video", and "what about B", then re-route the resolved question.
-- Updated route-specific prompt requirements for hook, mixed, improvement, transcript, and metadata-only answers.
-- Updated Phase 2 documentation, architecture notes, milestone notes, and agent decisions with the rules-first router tradeoff.
-- Added named Phase 2 retrieval policies for hook, Video A, Video B, balanced comparison, and metadata-augmented retrieval.
-- Changed comparison, hook, mixed, and improvement retrieval to avoid one global vector search and instead retrieve balanced Video A and Video B context.
-- Exposed `route` and `retrieval_policy` in `/chat` SSE `sources` and `done` events for route-aware eval validation.
-- Tightened assignment eval cases to assert expected routes, expected retrieval policies, hook-only answer citations, exact metadata citations, and A/B transcript chunk citations for mixed and improvement answers.
-- Added extended eval questions for stats scorecards, missing unsupported metrics, vague comparisons, creative tagline synthesis, multi-level hook-plus-metric recommendations, open-ended next-post advice, and incorrect-premise engagement claims.
-- Updated routing so share/save/stat questions stay metadata-only, recommendation/change/remake phrasing routes to improvement, and implicit two-video transcript questions use balanced A/B comparison retrieval.
-- Changed backend startup so Qdrant collection validation is non-fatal by default; the API boots in degraded mode with `/health` showing `qdrant: false`, while ingest/chat still fail visibly if Qdrant is required and unreachable.
-- Added `REQUIRE_QDRANT_ON_STARTUP` for fail-fast deployments and `QDRANT_CHECK_COMPATIBILITY=false` to suppress Qdrant server-version probe warnings by default.
-- Changed `/chat` streaming so retrieval, prompt construction, provider streaming, and chat persistence failures are logged and emitted as SSE `error` events instead of abruptly closing the chunked response.
-- Hardened `scripts/eval_assignment_questions.py` so broken chunked chat streams, SSE error events, and per-question chat request failures are recorded as failed eval cases while the rest of the suite continues.
-- Added an internal `session_usage_ledger` Postgres table with per-session video count, transcript-source rollup, Whisper seconds, chunk/embedding counts, chat token counts, model names, cache hit/miss counts, and creation time.
-- Wired ingestion to create usage ledger rows, count transcript cache hits/misses, count uncached Groq Whisper seconds, and record chunk/embedding counts after Qdrant upsert.
-- Wired chat streaming to record provider-reported prompt/completion tokens when available and deterministic token estimates when stream usage is unavailable.
-- Fixed stuck frontend status polling by adding a timeout around `/status` fetches and rescheduling polling after transient status failures while the browser remains online.
-- Changed `GET /status/{session_id}` to load the session and video metadata in one Postgres session, and added status response logs with status, step, progress, and metadata count.
-- Added runtime backpressure settings for concurrent ingests, per-IP hourly sessions, per-video chunk count, chat history messages, retrieved chunks, and Whisper/audio seconds.
-- Added process-local ingest slot tracking and per-IP hourly session limiting so overloaded `POST /ingest` requests return `429` instead of silently queuing.
-- Added `GET /config` so the frontend can render the same runtime limits the backend enforces.
-- Capped transcript chunks before embedding/Qdrant upsert with `MAX_CHUNKS_PER_VIDEO`.
-- Capped chat history loading and prompt history with `MAX_CHAT_HISTORY_MESSAGES`.
-- Capped Qdrant retrieval with `MAX_RETRIEVED_CHUNKS` while preserving separate A/B retrieval for comparison routes.
-- Updated the frontend to fetch runtime limits, show them as compact chips, use the retrieved-chunk cap for source display, and render backend `429` details cleanly.
-- Added a Render-ready backend Dockerfile that installs `ffmpeg`, copies the backend package with repo-root Docker context, writes runtime media to `/tmp/creator-rag`, and starts Uvicorn on the Render `PORT`.
-- Added `.dockerignore` and `render.yaml` so the backend can be deployed as a Render Docker web service with provider secrets supplied through Render environment variables.
-- Added `CORS_ORIGIN_REGEX` alongside exact `CORS_ORIGINS` and documented the hosted frontend/backend pairing with frontend `NEXT_PUBLIC_API_BASE`.
-- Normalized configured backend CORS origins by trimming trailing slashes so pasted hosted frontend URLs do not fail browser preflight checks.
-- Updated the frontend API base handling to trim trailing slashes from hosted backend URLs before calling `/config`, `/ingest`, `/status`, `/messages`, and `/chat`.
-- Reorganized `README.md` around the requested headings: project overview, features, architecture, tech stack, setup, environment variables, running locally, demo flow, API endpoints, RAG design, cost and scalability, known limitations, and future production improvements.
-- Kept the larger README architecture flow as Mermaid and changed the small demo flow to ASCII text.
-- Moved detailed setup, environment variable, local run, Docker, Render deployment, and check commands from `README.md` into `docs/installation.md`; the README now links to the installation guide while preserving the requested headings.
-- Added phase-development links near the top of `README.md`, linked the Phase 1 ingestion/status/chat pipeline diagrams from the README architecture section, and added a Mermaid RAG flow directly under the README RAG design heading.
-- Added `issues/prd.md` for the cross-phase frontend error-handling and retry work after the design interview locked URL validation, structured errors, whole-session retry, state guards, stalled warnings, and no fake cancellation.
-- Broke the error-handling PRD into nine local vertical-slice issue files under `issues/`, ordered from URL validation through structured errors, ingestion failures, retry, state guards, polling, rate-limit UX, chat stream errors, and final docs/verification.
-- Fixed the frontend 8% stuck-ingest symptom by replacing overlapping status fetch effects with one immediate polling loop per active session, retrying transient status failures from that loop, and marking `/status/{session_id}` responses as `Cache-Control: no-store`.
-- Added optional `yt-dlp` cookie authentication for metadata and audio extraction through `YTDLP_COOKIES_PATH` and `YTDLP_COOKIES_FROM_BROWSER`, with cookie-file precedence for repeatable local/deployed runs.
-- Updated YouTube access error classification so sign-in or bot-check failures produce a structured retryable message that points to `YTDLP_COOKIES_PATH`.
-- Documented the YouTube cookie workflow in `.env.example`, `.gitignore`, README, installation docs, architecture notes, phase docs, product spec, and plan notes.
-- Added `docs/FAQ.md` with 20 linked demo-rehearsal questions and plain-English answers covering architecture, provider choices, source of truth, ingestion, queues, citations, cost, and production scaling.
-- Linked the README document map, known limitations, and future production improvements sections to the new FAQ.
+- Reached product alignment through design grilling:
+  - real pivot on a separate branch;
+  - refactor in place while reusing useful infrastructure;
+  - OAuth is required for MVP;
+  - Google OAuth is the primary login system for MVP;
+  - private/testing OAuth access is acceptable for first validation;
+  - users select owned channel videos after connecting YouTube;
+  - baseline comparisons are channel-relative;
+  - evidence gates are required before naming a primary bottleneck;
+  - deterministic analytics own diagnosis, while LLMs own explanation and coaching;
+  - comments need a bounded Audience Signals Agent;
+  - chat is attached to reports and grounded in analysis snapshots.
+- Replaced old `AGENTS.md` instructions with pivot-specific workflow, evidence standards, OAuth/privacy rules, analyzer boundaries, schema direction, and source citation expectations.
+- Replaced `.codex/PRODUCT_SPEC.md` with the YouTube video performance diagnosis product spec.
+- Replaced `.codex/ARCHITECTURE.md` with the OAuth-connected analysis-run architecture.
+- Replaced `README.md` with the new project overview, architecture, setup direction, and MVP milestone sequence.
+- Replaced `.codex/PLANS.md` with pivot milestones and acceptance criteria.
+- Reset this progress file for the new product direction.
+- Tightened the MVP product contract through a second design-grilling pass:
+  - OAuth-first and owned-video diagnosis wins over public URL diagnosis for MVP;
+  - MVP diagnosis is long-form-only, with Shorts detected and excluded;
+  - first 7 completed days is the default comparison window, with early-read downgrades;
+  - fewer than 5 comparable prior long-form videos prevents confident primary-bottleneck diagnosis;
+  - CTR and impressions are optional/manual context, so packaging confidence is capped without click-opportunity evidence;
+  - automated thumbnail image analysis is excluded from MVP; thumbnails are stored and displayed but not interpreted without a future cited vision analyzer;
+  - retention curve or equivalent manual retention evidence is required for precise hook and pacing diagnosis;
+  - comments are bounded supporting evidence and unavailable comments are neutral;
+  - engagement/satisfaction uses opportunity-normalized metrics;
+  - distribution expansion requires trend, traffic-source, or audience-segment evidence and cannot claim algorithm certainty;
+  - reports use compact timestamped evidence cards with embedded YouTube player seek actions, not essay-first output;
+  - every factual report claim requires machine-readable citations to stored evidence;
+  - strict report JSON/citation validation is required before display, with deterministic fallback if LLM generation fails;
+  - manual metrics, manual transcripts, and user context are stored separately and labeled as user-provided;
+  - transcript acquisition uses bounded retries, Whisper fallback, and optional user-provided transcript/script;
+  - follow-up chat stays grounded in immutable analysis snapshots unless the user explicitly refreshes or adds context;
+  - lightweight report feedback is captured against `analysis_run_id` for validation, not used as diagnosis evidence or chat memory;
+  - video selection is manual for MVP and the app should not precompute private analytics for every upload to auto-rank underperformers;
+  - MVP analysis execution uses FastAPI background tasks with explicit queue-ready statuses instead of adding a durable job queue now;
+  - retrying a failed analysis creates a new linked `analysis_run` instead of mutating the failed run;
+  - refreshing analytics or adding interpretation-changing manual context also creates linked runs with explicit `run_reason`.
+- Updated `AGENTS.md`, `README.md`, `.codex/PRODUCT_SPEC.md`, `.codex/ARCHITECTURE.md`, and `.codex/PLANS.md` with these stricter reliability decisions.
+- Added a frontend `/faq` page entry explaining why the product does not compare creators to big channels by default and treats future reference videos as study material rather than copy benchmarks.
+- Wrote `issues/prd.md` for the OAuth-connected concierge skeleton:
+  - creator Google/YouTube connection;
+  - admin-only internal evidence dashboard;
+  - first-7-day analytics and baseline package;
+  - retention and transcript mapping priority;
+  - concierge report workflow;
+  - anti-imitation product principles;
+  - extensive user stories, implementation decisions, testing decisions, out-of-scope items, and further notes.
+- Broke `issues/prd.md` into approved vertical-slice implementation issues:
+  - `issues/001-connect-youtube-oauth-and-session-shell.md`;
+  - `issues/002-choose-youtube-channel.md`;
+  - `issues/003-select-owned-long-form-upload.md`;
+  - `issues/004-create-analysis-run-with-honest-progress.md`;
+  - `issues/005-admin-run-list-and-access-boundary.md`;
+  - `issues/006-capture-selected-video-evidence-snapshot.md`;
+  - `issues/007-build-baseline-evidence-package.md`;
+  - `issues/008-capture-retention-evidence-and-drop-candidates.md`;
+  - `issues/009-acquire-transcript-and-map-retention-moments.md`;
+  - `issues/010-add-manual-context-and-linked-revision-runs.md`;
+  - `issues/011-admin-notes-usage-ledger-and-scoped-export.md`;
+  - `issues/012-concierge-report-workflow-and-validation-template.md`;
+  - `issues/013-creator-settings-for-disconnect-and-data-deletion.md`;
+  - `issues/014-retire-legacy-comparison-surface-and-enforce-mvp-guardrails.md`.
+- Improved the frontend OAuth connection shell for usability and visual polish:
+  - added skip-link support and main-content targets across the home and FAQ pages;
+  - changed internal navigation to Next `Link`;
+  - added async connection status announcement, alert/status roles, clearer OAuth CTA labels, and last-verified display;
+  - reshaped the home page into a creator evidence workbench with readiness steps, scoped-access rows, and clearer privacy guardrails;
+  - replaced the shared CSS with stronger focus states, responsive fixed-size typography, better long-text wrapping, reduced-motion handling, and a cooler multi-accent palette.
 
 ## Current Next Step
 
-Verify the `yt-dlp` cookie configuration path with focused backend tests, then retry the failed YouTube ingest after configuring a valid cookies file.
+Start implementation from `issues/001-connect-youtube-oauth-and-session-shell.md`, then proceed through the numbered vertical slices in dependency order.
+
+Implementation must enforce the accepted MVP constraints above while building this skeleton.
 
 ## Known Issues
 
-- None currently blocking Phase 2.
+- The codebase still contains legacy YouTube/Instagram two-video comparison concepts.
+- Legacy endpoints and tests will need phased removal or migration.
+- Alembic is not installed or configured yet.
+- OAuth token encryption is not implemented yet.
+- YouTube Data API and YouTube Analytics API provider wrappers are not implemented yet.
+- Manual evidence storage, report citation validation, and deterministic report fallback are not implemented yet.
+- Structured-first manual context fields are not implemented yet.
+- Report feedback storage and copied-output tracking are not implemented yet.
+- Linked retry for failed analysis runs is not implemented yet.
+- Linked refresh and manual-context revision runs are not implemented yet.
 
-## Manual Test Results
+## Verification
 
-- `python3 -m compileall backend/app` passed.
-- `ffmpeg -version` passed; ffmpeg 8.1.1 is installed.
-- `npm install` passed after network escalation.
-- `npm run build` passed for the Next.js frontend.
-- `backend/.venv/bin/pip install -r backend/requirements.txt` passed after network escalation.
-- `backend/.venv/bin/python -m compileall backend/app` passed.
-- `backend/.venv/bin/python -c "import backend.app.main"` passed.
-- Chunker smoke test passed for source tags, overlap chunking, and hook flag.
-- `npm run dev` initially failed under sandbox port permissions, then started successfully after escalation.
-- `backend/.venv/bin/python -c "import backend.app.main"` passed after the latest fixes.
-- `npm run build` passed after the latest frontend platform-selector changes.
-- `GET /health` on the running backend returned `{"api": true, "postgres": true, "qdrant": true}` using the configured cloud credentials.
-- Backend restart after Qdrant dimension validation passed; startup logged existing collection dimension `384` matching expected `384`.
-- CORS preflight from `http://localhost:3001` to `POST /ingest` passed.
-- `GET /status/{session_id}` now returns `current_step`, `progress_percent`, and `updated_at`.
-- `youtube_transcript_api` live smoke test returned 1,280 caption-derived word objects for `https://youtu.be/cLpfcn_dPEo`.
-- Live ingest for the two YouTube URLs from the issue completed with status `ready` in about 14 seconds using `youtube_captions` for both videos.
-- The same live ingest upserted 38 chunks for Video A and 27 chunks for Video B to Qdrant.
-- Chat smoke test streamed an engagement-rate answer with `[Video A metadata]` and `[Video B metadata]` citations.
-- Documentation restructure verified by listing `.codex/` contents.
-- `backend/.venv/bin/python -m compileall backend/app backend/tests` passed after ingestion cache/extractor changes.
-- `backend/.venv/bin/python -m unittest discover backend/tests` passed for cache key/sessionization behavior and compare-query routing.
-- `backend/.venv/bin/python -m unittest discover backend/tests` passed after metadata-tool routing was added; tests assert numeric metadata questions do not call Qdrant retrieval.
-- `backend/.venv/bin/python -m unittest discover backend/tests` passed after uncapping YouTube captions; tests assert caption words beyond 10 minutes are kept and long captioned YouTube videos do not use Whisper.
-- `backend/.venv/bin/python -m compileall backend/app backend/tests` and `git diff --check` passed after the long-caption change.
-- `backend/.venv/bin/python -m unittest discover backend/tests` passed after replacing local transcription with Groq `whisper-large-v3`; tests assert the Groq transcription call requests `verbose_json` word timestamps.
-- `backend/.venv/bin/python -c "import backend.app.main; import backend.app.ingest.transcriber"` passed after removing the local `faster-whisper` dependency.
-- `backend/.venv/bin/pip uninstall -y faster-whisper` removed the local transcription package from the current virtualenv; `pip show faster-whisper` confirms it is no longer installed.
-- `npm run build` passed after adding per-video diagnostics and `completed` status support to the frontend.
-- Live mixed ingest on port 8001 with YouTube `https://youtu.be/cLpfcn_dPEo` and Instagram `https://instagram.com/reel/DEDbGqpyfkT/` returned `session_id=994ea123-443d-4dc9-80a0-2aac7e8627ae` immediately and reached `completed`.
-- That live mixed ingest stored raw metadata for both rows, used `captions` for Video A, used `whisper` for Video B, and upserted 27 Video A chunks plus 3 Video B chunks.
-- Chat smoke tests on the completed session streamed cited answers; a Video B query retrieved `[Video B, chunk 0]`, `[Video B, chunk 1]`, and `[Video B, chunk 2]`.
-- Repeat ingest `session_id=4920d31a-0ee2-4d00-8b5b-e61d3e7a470c` hit the extraction cache for both metadata and transcripts, then completed with cache flags set for both videos.
-- Negative ingest `session_id=67fb27f9-9c42-4733-8f47-5f0fc2a48b7b` with a bad Instagram URL failed visibly; `/status` reported Video B `ingest_status=failed`, `transcript_source=unavailable`, and the extractor error message.
-- After the compare-query routing fix, chat on cached session `4920d31a-0ee2-4d00-8b5b-e61d3e7a470c` returned source events containing both Video A and Video B transcript chunks.
-- Numeric chat smoke test on cached session `4920d31a-0ee2-4d00-8b5b-e61d3e7a470c` for engagement rates returned only metadata sources and produced no Qdrant retrieval log.
-- Semantic chat smoke test on the same session for "What does Video B discuss?" retrieved 3 Video B chunks from Qdrant and streamed transcript citations.
-- `backend/.venv/bin/python -m compileall backend/app backend/evals backend/tests scripts` passed after adding the assignment eval runner.
-- `backend/.venv/bin/python -m unittest backend.tests.test_assignment_eval backend.tests.test_rag_graph` passed; 14 tests covered eval validation and A/B routing.
-- `backend/.venv/bin/python -m unittest discover backend/tests` passed; 26 tests total.
-- `backend/.venv/bin/python scripts/eval_assignment_questions.py --help` passed.
-- `git diff --check` passed after the eval changes.
-- `backend/.venv/bin/python -m pip install -r backend/requirements-dev.txt` passed after network escalation to install `pytest`, `ruff`, and `pre-commit`.
-- `npm install` in `frontend/` passed after network escalation and updated `frontend/package-lock.json` for ESLint and markdown lint dependencies.
-- `npm ci` in `frontend/` passed after the lockfile update.
-- `make backend-lint` passed with Ruff check and Ruff format check.
-- `make backend-tests` passed with 26 provider-mocked/unit tests selected and 1 smoke test deselected.
-- `make mocked-smoke` passed; the smoke test patches FastAPI dependencies and does not call real providers.
-- `make frontend-lint`, `make frontend-typecheck`, `make frontend-build`, and `make markdown-lint` passed.
-- `make ci` passed end to end.
-- `PRE_COMMIT_HOME=/private/tmp/creator-rag-pre-commit backend/.venv/bin/pre-commit run --all-files` passed. The explicit cache path avoids sandbox writes to `~/.cache/pre-commit`.
-- `make markdown-lint` passed after the README refresh.
-- `make markdown-lint` passed after changing the README high-level pipeline to Mermaid.
-- `make markdown-lint` passed after fixing the README Mermaid label syntax.
-- `backend/.venv/bin/python -m pytest backend/tests/test_prompt.py backend/tests/test_metadata_tools.py backend/tests/test_assignment_eval.py` passed after the mixed-citation and unavailable-metric fixes.
-- `make ci` passed after the mixed-citation and unavailable-metric fixes; backend tests now report 30 selected tests plus the mocked smoke test.
-- `backend/.venv/bin/python -m pytest backend/tests/test_metadata_tools.py backend/tests/test_assignment_eval.py backend/tests/test_prompt.py` passed after marking engagement comparisons incomplete when views are unavailable.
-- `make ci` passed after the incomplete-engagement comparison fix; backend tests now report 31 selected tests plus the mocked smoke test.
-- `backend/.venv/bin/python -m pytest backend/tests/test_prompt.py backend/tests/test_assignment_eval.py` passed after tightening citation formatting.
-- `make ci` passed after tightening citation formatting; backend tests now report 33 selected tests plus the mocked smoke test.
-- `backend/.venv/bin/python -m pytest backend/tests/test_stale_ingest.py backend/tests/test_status_endpoint.py` passed after adding stale-session detection and status-route coverage.
-- `make ci` passed after the stale-session, clean-refresh, and frontend network handling changes; backend tests now report 37 selected tests plus the mocked smoke test.
-- `git diff --check` passed after the stale-session and clean-refresh changes.
-- `make frontend-lint` and `make frontend-typecheck` passed after adding frontend network console logging.
-- `make markdown-lint` and `git diff --check` passed after the latest docs updates.
-- Frontend dev server started at `http://localhost:3001`; an escalated `curl -I http://localhost:3001` returned HTTP 200.
-- `backend/.venv/bin/python -m pytest backend/tests/test_rag_graph.py backend/tests/test_prompt.py` passed after the explicit Phase 2 route implementation.
-- `make ci` passed after the Phase 2 rules-first router implementation; backend tests now report 44 selected tests plus the mocked smoke test.
-- `git diff --check` passed after the Phase 2 router implementation.
-- A classifier smoke check mapped the five assignment questions to `METADATA_ONLY`, `METADATA_ONLY`, `HOOK_COMPARISON`, `MIXED_COMPARISON`, and `IMPROVEMENT_SUGGESTION`.
-- `backend/.venv/bin/python scripts/eval_assignment_questions.py --api-base http://127.0.0.1:8000 --session-id 4920d31a-0ee2-4d00-8b5b-e61d3e7a470c` passed all five live assignment eval questions after the Phase 2 router implementation.
-- `backend/.venv/bin/python -m pytest backend/tests/test_rag_graph.py` passed after adding named retrieval policies and balanced A/B comparison retrieval.
-- `make backend-lint` and `make backend-tests` passed after adding named retrieval policies; backend tests now report 46 selected tests plus 1 deselected smoke test.
-- `make ci` passed after adding named retrieval policies and the markdown final-newline fix for `.codex/skills/grill-me/SKILL.md`.
-- `git diff --check` passed after adding named retrieval policies.
-- Live assignment eval rerun was attempted after the retrieval-policy change, but the existing backend on port 8000 timed out and a fresh backend on port 8002 could not resolve the configured Qdrant Cloud host from this environment.
-- `backend/.venv/bin/python -m pytest backend/tests/test_assignment_eval.py backend/tests/test_rag_service.py` passed after adding route-aware eval checks and chat stream route traces.
-- `make backend-lint` and `make backend-tests` passed after the route-aware eval change; backend tests now report 52 selected tests plus 1 deselected smoke test.
-- `make ci` passed after the route-aware eval change.
-- `git diff --check` passed after the route-aware eval change.
-- `backend/.venv/bin/python -m pytest backend/tests/test_startup.py` passed after making Qdrant startup validation non-fatal by default.
-- `backend/.venv/bin/python -m pytest backend/tests/test_mocked_smoke.py` passed after making Qdrant startup validation non-fatal by default.
-- `make backend-lint` and `make backend-tests` passed after making Qdrant startup validation non-fatal by default; backend tests now report 54 selected tests plus 1 deselected smoke test.
-- `backend/.venv/bin/uvicorn backend.app.main:app --host 127.0.0.1 --port 8003` started successfully after the Qdrant startup change and no longer emitted the Qdrant compatibility warning; the temporary process was stopped after verification.
-- `make ci` passed after making Qdrant startup validation non-fatal by default.
-- `backend/.venv/bin/python -m pytest backend/tests/test_assignment_eval.py backend/tests/test_rag_graph.py` passed after adding extended eval questions and routing heuristics.
-- `make backend-lint` and `make backend-tests` passed after adding extended eval questions; backend tests now report 60 selected tests plus 1 deselected smoke test.
-- `make ci` passed after adding extended eval questions.
-- `backend/.venv/bin/python -m pytest backend/tests/test_assignment_eval.py backend/tests/test_rag_service.py` passed after hardening chat-stream and eval-stream error handling.
-- `make backend-lint` passed after hardening chat-stream and eval-stream error handling.
-- `make backend-tests` passed after hardening chat-stream and eval-stream error handling; backend tests now report 65 selected tests plus 1 deselected smoke test.
-- `make ci` and `git diff --check` passed after hardening chat-stream and eval-stream error handling.
-- `backend/.venv/bin/python -m pytest backend/tests/test_chat_client.py backend/tests/test_usage_ledger.py backend/tests/test_rag_service.py` passed after adding the usage ledger.
-- `make backend-lint`, `make backend-tests`, `make markdown-lint`, `git diff --check`, and `make ci` passed after adding the usage ledger; backend tests now report 69 selected tests plus 1 deselected smoke test.
-- `curl -sS --max-time 5 http://127.0.0.1:8000/status/58e0d15d-eeb1-4388-a27d-53f7517a8540` returned `completed`, progress `100`, and both metadata rows after investigating the stuck frontend report.
-- `backend/.venv/bin/python -m pytest backend/tests/test_postgres_session.py backend/tests/test_status_endpoint.py`, `make frontend-typecheck`, and `make frontend-lint` passed after the status polling fix.
-- `make ci` passed after the status polling fix; backend tests now report 70 selected tests plus 1 deselected smoke test.
-- `backend/.venv/bin/python -m pytest backend/tests/test_backpressure.py backend/tests/test_ingest_backpressure.py backend/tests/test_rag_graph.py backend/tests/test_prompt.py` passed after adding backpressure limits.
-- `npm run typecheck` passed after adding frontend runtime-limit display.
-- `make backend-lint`, `make backend-tests`, `make frontend-lint`, `make frontend-typecheck`, `make frontend-build`, `make markdown-lint`, and `git diff --check` passed after adding backpressure limits.
-- `backend/.venv/bin/python -m pytest backend/tests/test_rag_graph.py` passed after tightening the lowered retrieval-limit path.
-- `make ci` passed after the final backpressure changes; backend tests now report 76 selected tests plus 1 deselected smoke test, and the mocked smoke test passes separately.
-- `backend/.venv/bin/python -m pytest backend/tests/test_startup.py`, `cd frontend && npm run typecheck`, `make backend-lint`, `make frontend-lint`, `make markdown-lint`, and `git diff --check` passed after adding Render Docker/CORS config.
-- `docker build -f backend/Dockerfile -t creator-rag-backend:render-smoke .` passed after the final Dockerfile changes, including `ffmpeg`, Python dependencies, FastEmbed/Qdrant wheels, and the backend package copy.
-- `make ci` passed after the Render Docker/CORS updates; backend tests now report 78 selected tests plus 1 deselected smoke test, and the mocked smoke test passes separately.
-- `backend/.venv/bin/python -m pytest backend/tests/test_startup.py`, `make backend-lint`, `git diff --check`, and `make ci` passed after adding trailing-slash normalization for backend CORS origins.
-- `make markdown-lint` passed after reorganizing the README headings and diagram formats.
-- `make markdown-lint` passed after moving setup details into `docs/installation.md`.
-- `make markdown-lint` passed after adding README phase links, architecture pipeline links, and the RAG design Mermaid diagram.
-- `frontend/node_modules/.bin/markdownlint-cli2 issues/prd.md` and `git diff --check` passed after adding the error-handling PRD.
-- `make markdown-lint` failed after adding the PRD because untracked skill markdown files under `.codex/skills/` have pre-existing markdownlint errors; the new PRD itself passes markdown lint.
-- `frontend/node_modules/.bin/markdownlint-cli2 issues/*.md` and `git diff --check` passed after creating the local issue files.
-- `backend/.venv/bin/python -m pytest backend/tests/test_status_endpoint.py`, `make backend-lint`, `make frontend-lint`, `make frontend-typecheck`, `make frontend-build`, and `git diff --check` passed after the single-loop status polling fix.
-- `backend/.venv/bin/python -m pytest backend/tests/test_ytdlp_options.py backend/tests/test_app_errors.py` passed after adding `yt-dlp` cookie option support and YouTube bot-check error classification.
-- `make backend-tests` passed after the `yt-dlp` cookie option change; backend tests now report 92 selected tests plus 1 deselected smoke test.
-- `make backend-lint`, `frontend/node_modules/.bin/markdownlint-cli2 README.md docs/installation.md docs/phase/phase-1.md .codex/ARCHITECTURE.md .codex/PLANS.md .codex/PRODUCT_SPEC.md AGENTS.md .codex/Progress.md`, and `git diff --check` passed after the cookie docs/code update.
-- `make markdown-lint` still fails on pre-existing `.codex/skills/` markdownlint errors outside this change; the changed docs pass markdownlint directly.
-- `frontend/node_modules/.bin/markdownlint-cli2 README.md docs/FAQ.md` and `git diff --check` passed after adding the FAQ.
+- Documentation files were rewritten in place.
+- No code or tests were changed in this documentation reset chunk.
+- `git diff --check` passed.
+- A targeted old-product term scan was run against the rewritten docs; remaining references are intentional migration notes.
+- Markdown lint could not run because `frontend/node_modules/.bin/markdownlint-cli2` is not present in this checkout.
+- Latest documentation tightening chunk verification:
+  - `git diff --check` passed.
+  - Stale-decision scan found no conflicting baseline or Shorts wording; remaining hits are intentional "not a generic chatbot" and "no uncited LLM prose" rules.
+  - Unrelated deleted `issues/` files and untracked `.codex/skills/web-design-guidelines/` were observed in the worktree and left untouched.
+  - Linked-run schema was checked after correction; `parent_analysis_run_id` and `run_reason` now live under `analysis_runs`, and `git diff --check` passed.
+  - Frontend FAQ page entry was added; markdown FAQ was restored to avoid putting this in `docs/FAQ.md`.
+  - Frontend typecheck could not run meaningfully because `frontend/node_modules` is missing; the failure was missing React/JSX type dependencies, not a page-specific type error.
+  - New PRD verification:
+    - `git diff --check` passed.
+    - `issues/prd.md` was written with 283 lines.
+    - Markdownlint could not run because `frontend/node_modules/.bin/markdownlint-cli2` is unavailable in this checkout.
+  - PRD-to-issues verification:
+    - 14 numbered issue files were generated in `issues/`.
+    - `git diff --check` passed.
+  - Frontend UI usability chunk verification:
+    - `npm run typecheck` passed in `frontend`.
+    - `npm run lint` passed in `frontend`.
+    - `git diff --check` passed.
+    - Next dev server started at `http://127.0.0.1:3000` after localhost binding escalation.
+    - `curl -I http://127.0.0.1:3000` and `curl -I http://127.0.0.1:3000/faq` returned HTTP 200.
+    - Rendered HTML for `/` and `/faq` was fetched and includes the new skip link, main-content targets, revised connection shell, and FAQ content.
+    - In-app Browser visual inspection could not run because the listed Browser plugin reported no available `iab` browser instance.

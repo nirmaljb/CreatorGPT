@@ -3,6 +3,9 @@ uvicorn[standard]
 python-dotenv
 pydantic
 pydantic-settings
+alembic
+cryptography
+httpx
 yt-dlp
 youtube-transcript-api
 groq

@@ -6,6 +6,71 @@ class Base(DeclarativeBase):
     pass
 
 
+class UserModel(Base):
+    __tablename__ = "users"
+    __table_args__ = (UniqueConstraint("google_sub", name="uq_users_google_sub"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    google_sub: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True, index=True)
+    email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    avatar_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class OAuthStateModel(Base):
+    __tablename__ = "oauth_states"
+
+    state_hash: Mapped[str] = mapped_column(String(128), primary_key=True)
+    code_verifier: Mapped[str] = mapped_column(String(128), nullable=False)
+    redirect_uri: Mapped[str] = mapped_column(Text, nullable=False)
+    expires_at = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    consumed_at = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class OAuthTokenModel(Base):
+    __tablename__ = "oauth_tokens"
+    __table_args__ = (UniqueConstraint("user_id", "provider", name="uq_oauth_tokens_user_provider"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False, default="google")
+    encrypted_refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    granted_scopes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    missing_scopes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    connection_status: Mapped[str] = mapped_column(String(32), nullable=False, default="reconnect_required")
+    reconnect_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_verified_at = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class ServerSessionModel(Base):
+    __tablename__ = "server_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    session_token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
+    csrf_token_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    expires_at = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    revoked_at = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    last_seen_at = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class SessionModel(Base):
     __tablename__ = "sessions"
 
