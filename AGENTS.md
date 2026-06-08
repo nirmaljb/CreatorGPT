@@ -39,6 +39,15 @@ This is not a generic video chatbot and not the old YouTube/Instagram comparison
 - If evidence is insufficient, the product must say so and ask targeted questions instead of producing a weak diagnosis.
 - Follow-up chat must be grounded in the analysis snapshot unless the user explicitly refreshes data, adds manual context, or invokes a deeper analyzer.
 
+## Frontend
+Always use the /web-design-guidelines and /frontend-design skill for generating the frontend. Avoid creating AI sloppy design with colour AI Sloppy colour schema. Attempt to make UI/UX simple, clean, easily navigable and clutter free. 
+
+Always imagine that the user is completely dumb and don't would struggle if given more options to them. Provide them with the best options available. Keep the UI focused towards the main solution that we're providing.
+
+Always be transparent with the user about the data that we're collecting and how we're using it. 
+
+Always prefer to create a multi-page saas application. 
+
 ## Evidence Standard
 
 Reliable diagnosis is the product. The system must prefer an honest incomplete answer over confident slop.

@@ -75,11 +75,7 @@ const readinessSteps = [
   }
 ];
 
-function normalizeApiBase(value: string | undefined) {
-  return (value || "http://localhost:8000").replace(/\/+$/, "");
-}
-
-const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_BASE);
+const CONNECT_URL = "/auth/google/start";
 
 function statusLabel(status: ConnectionStatus) {
   if (status === "connected") return "Connected";
@@ -111,13 +107,12 @@ export default function Home() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const connectUrl = useMemo(() => `${API_BASE}/auth/google/start`, []);
+  const [authStartError, setAuthStartError] = useState<string | null>(null);
 
   const loadMe = useCallback(async () => {
     setError(null);
     try {
-      const response = await fetch(`${API_BASE}/me`, {
+      const response = await fetch("/api/me", {
         credentials: "include",
         cache: "no-store"
       });
@@ -135,9 +130,16 @@ export default function Home() {
     void loadMe();
   }, [loadMe]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("auth") !== "unavailable") return;
+    setAuthStartError(params.get("reason") || "Google OAuth start is unavailable.");
+  }, []);
+
   const connectionStatus = me?.youtube.connection_status ?? "disconnected";
   const missingScopes = me?.youtube.missing_scopes ?? [];
   const grantedScopes = me?.youtube.granted_scopes ?? [];
+  const visibleError = error || authStartError;
   const lastVerified = useMemo(() => {
     const rawValue = me?.youtube.last_verified_at;
     if (!rawValue) return null;
@@ -226,9 +228,9 @@ export default function Home() {
             </div>
           )}
 
-          {error && (
+          {visibleError && (
             <p className="status-message error" role="alert">
-              {error}
+              {visibleError}
             </p>
           )}
           {missingScopes.length > 0 && (
@@ -238,7 +240,7 @@ export default function Home() {
             </div>
           )}
 
-          <a className="connect-button" href={connectUrl} aria-describedby="connect-help">
+          <a className="connect-button" href={CONNECT_URL} aria-describedby="connect-help">
             <span>{actionLabel(me, loading)}</span>
             <span className="button-arrow" aria-hidden="true">
               -&gt;

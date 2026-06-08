@@ -34,6 +34,10 @@
 - Add linked retry semantics for failed analysis runs.
 - Add `run_reason` and linked-run semantics for refresh and manual-context revisions.
 - Add a minimal frontend path:
+  - public landing page at `/`;
+  - focused Google/YouTube authentication page at `/auth`;
+  - authenticated SaaS workspace at `/app`;
+  - anti-gimmick positioning that avoids clickbait-title, thumbnail-generator, and copy-big-creators promises;
   - Connect YouTube;
   - select owned video;
   - create analysis run.
@@ -50,6 +54,7 @@
 - Retrying a failed analysis run creates a new row with `parent_analysis_run_id`.
 - Refreshing or revising with manual context creates a new linked row with the appropriate `run_reason`.
 - Tests mock Google and YouTube providers.
+- The frontend route split keeps landing, authentication, and the working application separate.
 
 ## Milestone 2: Analysis Snapshot Foundation
 

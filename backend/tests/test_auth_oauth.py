@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from backend.app import main
 from backend.app.auth import crypto as crypto_module
@@ -21,7 +22,11 @@ from backend.app.store.models import Base, OAuthTokenModel, ServerSessionModel, 
 
 @pytest.fixture()
 def sqlite_database(monkeypatch: pytest.MonkeyPatch):
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    engine = create_engine(
+        "sqlite+pysqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     session_factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     Base.metadata.create_all(bind=engine)
     monkeypatch.setattr(database, "_engine", engine)
@@ -301,3 +306,15 @@ def test_credentialed_cors_filters_wildcard_origins() -> None:
 
     assert "*" not in settings.cors_origin_list
     assert "https://app.example.com" in settings.cors_origin_list
+
+
+def test_settings_accept_documented_oauth_aliases() -> None:
+    settings = Settings(
+        GOOGLE_CLIENT_ID="legacy-client-id.apps.googleusercontent.com",
+        GOOGLE_CLIENT_SECRET="legacy-client-secret",
+        OAUTH_TOKEN_ENCRYPTION_KEY="legacy-encryption-key",
+    )
+
+    assert settings.google_oauth_client_id == "legacy-client-id.apps.googleusercontent.com"
+    assert settings.google_oauth_client_secret == "legacy-client-secret"
+    assert settings.token_encryption_key == "legacy-encryption-key"

@@ -41,9 +41,15 @@ This product is not:
 - a keyword research tool;
 - a generic chatbot;
 - a generic AI coach;
+- a clickbait title generator;
 - a thumbnail generator;
+- a tool for copying large creators' videos, formats, thumbnails, titles, or personal style;
 - a replacement for YouTube Studio;
 - a tool that claims to know YouTube's internal algorithm.
+
+The product voice should feel like an experienced creator friend who is careful with the evidence: direct, useful, and honest about what it understands. It should not flatter the creator, market "brutally honest" takedowns, or give gimmicky answers. The product studies the creator's own channel, their own video style, and their own audience patterns, then explains what likely happened and what to try next.
+
+Landing-page positioning should stay focused on one promise: answer "Why did my video not perform?" with creator-owned evidence. The primary call to action is connecting YouTube. Supporting copy should explain read-only access, channel-relative baseline comparison, and the anti-imitation stance without presenting many competing options.
 
 ## 3. Target Customer
 

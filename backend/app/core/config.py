@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,11 +13,20 @@ class Settings(BaseSettings):
 
     database_url: str = Field(default="", alias="DATABASE_URL")
 
-    google_oauth_client_id: str = Field(default="", alias="GOOGLE_OAUTH_CLIENT_ID")
-    google_oauth_client_secret: str = Field(default="", alias="GOOGLE_OAUTH_CLIENT_SECRET")
+    google_oauth_client_id: str = Field(
+        default="",
+        validation_alias=AliasChoices("GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_CLIENT_ID"),
+    )
+    google_oauth_client_secret: str = Field(
+        default="",
+        validation_alias=AliasChoices("GOOGLE_OAUTH_CLIENT_SECRET", "GOOGLE_CLIENT_SECRET"),
+    )
     google_oauth_redirect_uri: str = Field(default="", alias="GOOGLE_OAUTH_REDIRECT_URI")
     frontend_app_url: str = Field(default="http://localhost:3000", alias="FRONTEND_APP_URL")
-    token_encryption_key: str = Field(default="", alias="TOKEN_ENCRYPTION_KEY")
+    token_encryption_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("TOKEN_ENCRYPTION_KEY", "OAUTH_TOKEN_ENCRYPTION_KEY"),
+    )
     oauth_state_ttl_seconds: int = Field(default=600, alias="OAUTH_STATE_TTL_SECONDS", ge=60)
     auth_session_ttl_seconds: int = Field(default=2_592_000, alias="AUTH_SESSION_TTL_SECONDS", ge=300)
     auth_session_cookie_name: str = Field(default="creator_session", alias="AUTH_SESSION_COOKIE_NAME")

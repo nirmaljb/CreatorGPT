@@ -86,10 +86,32 @@ Pivot planning and documentation reset.
   - added async connection status announcement, alert/status roles, clearer OAuth CTA labels, and last-verified display;
   - reshaped the home page into a creator evidence workbench with readiness steps, scoped-access rows, and clearer privacy guardrails;
   - replaced the shared CSS with stronger focus states, responsive fixed-size typography, better long-text wrapping, reduced-motion handling, and a cooler multi-accent palette.
+- Fixed the frontend OAuth reconnect entrypoint:
+  - changed the connection CTA from a browser-visible `NEXT_PUBLIC_API_BASE` URL to same-origin `/auth/google/start`;
+  - added a frontend OAuth start route that asks the backend for the Google authorization redirect and redirects directly to that provider URL when available;
+  - added a same-origin `/api/me` route that proxies the backend session payload so the connection shell no longer needs to expose the backend base URL in client code;
+  - kept backend API origin resolution server-side with `BACKEND_API_BASE`, `API_BASE`, or the existing `NEXT_PUBLIC_API_BASE` fallback.
+- Fixed the OAuth unavailable redirect diagnosis path:
+  - backend settings now accept canonical `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and `TOKEN_ENCRYPTION_KEY` plus the legacy `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `OAUTH_TOKEN_ENCRYPTION_KEY` aliases;
+  - frontend `/auth/google/start` now preserves the backend's sanitized failure reason on the home-page redirect instead of collapsing every failure to bare `auth=unavailable`;
+  - the connection shell now displays that OAuth-start reason to the user;
+  - README setup now documents the canonical OAuth env names;
+  - the OAuth test fixture now shares one in-memory SQLite connection across `TestClient` threads so auth route tests exercise the intended tables.
+- Accepted the multi-page SaaS route contract for the frontend:
+  - `/` is the public landing page;
+  - `/auth` is the focused Google/YouTube sign-in and data-permission page;
+  - `/app` is the authenticated workspace for video selection and diagnosis;
+  - `/faq` remains a supporting trust and education page;
+  - connected users visiting `/auth` should continue to `/app`, while unauthenticated users visiting `/app` should continue to `/auth`.
+- Accepted the public landing-page responsibility and product voice:
+  - `/` should state the core promise, explain the read-only trust boundary, and drive one primary `Connect YouTube` CTA;
+  - the product must not market itself as a clickbait title generator, thumbnail generator, generic AI coach, or way to copy large creators' videos or style;
+  - the tone should be direct and useful like an experienced creator friend, not flattering, gimmicky, or performatively "brutally honest";
+  - the diagnosis should stay grounded in the creator's own channel, own videos, audience patterns, and evidence limits.
 
 ## Current Next Step
 
-Start implementation from `issues/001-connect-youtube-oauth-and-session-shell.md`, then proceed through the numbered vertical slices in dependency order.
+Continue the SaaS frontend design grilling, then implement the accepted route split alongside `issues/001-connect-youtube-oauth-and-session-shell.md`.
 
 Implementation must enforce the accepted MVP constraints above while building this skeleton.
 
@@ -105,6 +127,7 @@ Implementation must enforce the accepted MVP constraints above while building th
 - Report feedback storage and copied-output tracking are not implemented yet.
 - Linked retry for failed analysis runs is not implemented yet.
 - Linked refresh and manual-context revision runs are not implemented yet.
+- Local `.env` currently lacks Google OAuth client credentials; until `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` are populated, `/auth/google/start` correctly returns `Google OAuth is not configured`.
 
 ## Verification
 
@@ -135,3 +158,20 @@ Implementation must enforce the accepted MVP constraints above while building th
     - `curl -I http://127.0.0.1:3000` and `curl -I http://127.0.0.1:3000/faq` returned HTTP 200.
     - Rendered HTML for `/` and `/faq` was fetched and includes the new skip link, main-content targets, revised connection shell, and FAQ content.
     - In-app Browser visual inspection could not run because the listed Browser plugin reported no available `iab` browser instance.
+  - OAuth reconnect URL fix verification:
+    - `npm run typecheck` passed in `frontend`.
+    - `npm run lint` passed in `frontend`.
+    - `git diff --check` passed.
+    - Next dev server started at `http://127.0.0.1:3100` after localhost binding escalation.
+    - Rendered HTML for `/` contains `href="/auth/google/start"` on the connection CTA.
+    - `curl http://127.0.0.1:3100/api/me` returned the backend session payload through the frontend proxy.
+    - `curl -D - http://127.0.0.1:3100/auth/google/start` returned a frontend-origin fallback redirect in this local environment because backend OAuth start did not return a provider redirect; it did not expose `localhost:8000` as the browser navigation target.
+  - OAuth unavailable redirect diagnosis fix verification:
+    - backend dev dependencies were installed into `backend/.venv` to run focused auth tests.
+    - `backend/.venv/bin/pytest backend/tests/test_auth_oauth.py` passed.
+    - `backend/.venv/bin/ruff check backend/app/core/config.py backend/app/auth/crypto.py backend/tests/test_auth_oauth.py` passed.
+    - direct backend import checks confirmed the legacy OAuth env aliases populate the canonical settings.
+    - `npm run typecheck` passed in `frontend`.
+    - `npm run lint` passed in `frontend`.
+    - `git diff --check` passed.
+    - `curl -D - http://127.0.0.1:3000/auth/google/start` now redirects to `/?auth=unavailable&reason=Google+OAuth+is+not+configured` in this local environment.
