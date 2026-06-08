@@ -1,8 +1,8 @@
-# YouTube Video Performance Diagnosis Tool
+# Candor YouTube Video Performance Diagnosis
 
 ## Project Overview
 
-This product helps serious YouTube creators understand why one of their videos underperformed and what to change in the next upload.
+Candor helps serious YouTube creators understand why one of their videos underperformed and what to change in the next upload.
 
 The app is not a generic video chatbot. It is a report-first post-mortem system:
 
@@ -14,6 +14,8 @@ The app is not a generic video chatbot. It is a report-first post-mortem system:
 
 The core product promise is reliability. If the data is insufficient to name a primary bottleneck, the product should say that clearly and ask for the specific missing context instead of producing a weak answer.
 
+Candor is also not a clickbait title generator, thumbnail generator, generic AI coach, or way to copy bigger creators. It studies the creator's own channel, videos, audience patterns, and evidence limits.
+
 ## Product Documents
 
 | Document | Purpose |
@@ -22,6 +24,7 @@ The core product promise is reliability. If the data is insufficient to name a p
 | [Architecture](.codex/ARCHITECTURE.md) | OAuth, analysis runs, analyzers, schema, API direction, and evidence gates |
 | [Plans](.codex/PLANS.md) | Pivot milestones and acceptance criteria |
 | [Progress](.codex/Progress.md) | Current status, completed chunks, next step, and known issues |
+| [Candor PRD](issues/prd.md) | Multi-page SaaS product plan from the latest design interrogation |
 | [Agent Notes](AGENTS.md) | Developer workflow, product decisions, security rules, and implementation constraints |
 
 ## Current Pivot
@@ -45,6 +48,7 @@ What changes:
 - One selected owned YouTube video instead of Video A/Video B comparison.
 - Long-form-only MVP diagnosis; Shorts are detected and excluded for now.
 - Report-first workflow instead of chatbot-first workflow.
+- Multi-page SaaS frontend: `/` landing, `/login` sign-in page, `/auth` permission detail page, `/app` authenticated workspace, and `/faq` trust page.
 - `analysis_run` as the product object instead of `session_id`.
 - Private YouTube Analytics and channel baseline as first-class evidence.
 - Deterministic evidence gates before the LLM writes a diagnosis.
@@ -73,6 +77,10 @@ Build an OAuth-connected YouTube diagnosis flow where a creator selects one unde
 - Shorts exclusion for MVP diagnosis.
 - Analysis-run creation.
 - FastAPI background-task analysis execution with explicit run statuses.
+- First-class `waiting_for_data` state for delayed required analytics, baseline, selected-video metadata, or ownership/channel verification.
+- Lightweight durable retry metadata for waiting runs.
+- Explicit per-run `Notify me` consent for delayed diagnoses.
+- Resend transactional email behind a provider interface, with a fake provider for tests.
 - Linked retry for failed analysis runs.
 - Linked refresh and manual-context revision runs.
 - Private analytics snapshot.
@@ -98,12 +106,17 @@ Build an OAuth-connected YouTube diagnosis flow where a creator selects one unde
 - Naming a primary bottleneck when evidence is insufficient.
 - Storing unlimited channel analytics data.
 - Requesting write/manage YouTube scopes.
+- Automatic waiting-run emails without explicit `Notify me`.
+- Marketing newsletters, growth nudges, weekly reports, or reactivation emails.
+- User-facing scores, grades, virality scores, thumbnail scores, hook scores, or confidence percentages.
+- Pricing, billing, teams, or workspaces in the MVP UI.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    user["Creator"] --> auth["Connect YouTube"]
+    user["Creator"] --> login["/login"]
+    login --> auth["Google OAuth"]
     auth --> channel["Fetch authenticated channel"]
     channel --> owned["List owned uploads"]
     owned --> selected["Select one video"]
@@ -116,12 +129,15 @@ flowchart TD
     job --> comments["Audience Signals Agent"]
     job --> packaging["Packaging Analyzer"]
     job --> baseline["Baseline Builder"]
+    ytanalytics --> waiting{"Required data delayed?"}
+    baseline --> waiting
+    waiting -->|Yes| retry["waiting_for_data + retry"]
+    retry --> job
 
-    ytanalytics --> diagnosis["Diagnosis Orchestrator"]
+    waiting -->|No| diagnosis["Diagnosis Orchestrator"]
     transcript --> diagnosis
     comments --> diagnosis
     packaging --> diagnosis
-    baseline --> diagnosis
 
     diagnosis --> gate{"Evidence sufficient?"}
     gate -->|Yes| report["Primary diagnosis report"]
@@ -129,6 +145,7 @@ flowchart TD
 
     report --> followup["Grounded follow-up chat"]
     gaps --> followup
+    retry --> notify["Optional per-run Notify me"]
 ```
 
 ## Diagnosis Model
@@ -191,6 +208,8 @@ New product endpoints should target analysis runs:
 | `POST /analysis-runs` | Create and start a background analysis run |
 | `GET /analysis-runs/{id}` | Read run status and progress |
 | `GET /analysis-runs/{id}/report` | Read generated report |
+| `POST /analysis-runs/{id}/notify` | Request per-run notification for waiting data |
+| `POST /analysis-runs/{id}/check-now` | Manually check a waiting run |
 | `POST /analysis-runs/{id}/followups` | Ask grounded follow-up questions |
 
 Legacy comparison endpoints may remain temporarily during migration, but new work should not extend them.
@@ -210,6 +229,9 @@ GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
 GOOGLE_OAUTH_REDIRECT_URI=
 TOKEN_ENCRYPTION_KEY=
+EMAIL_PROVIDER=fake
+RESEND_API_KEY=
+EMAIL_FROM=
 ```
 
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `OAUTH_TOKEN_ENCRYPTION_KEY` are accepted as legacy aliases, but new local setup should use the `GOOGLE_OAUTH_*` names and `TOKEN_ENCRYPTION_KEY`.
@@ -218,20 +240,18 @@ OAuth development should use Google Cloud OAuth Testing mode with allowlisted te
 
 ## First Implementation Milestone
 
-Build the OAuth-connected analysis skeleton:
+Build the Candor multi-page OAuth-connected analysis skeleton:
 
-1. Add Alembic.
-2. Add `users`, `youtube_channels`, `oauth_tokens`, and `analysis_runs`.
-3. Implement Google OAuth start/callback.
+1. Build the static `/`, `/login`, `/auth`, `/app`, and `/faq` shell with Candor positioning and current auth/session plumbing.
+2. Add Alembic-backed schema for `users`, `youtube_channels`, `oauth_tokens`, `analysis_runs`, waiting-run retry metadata, and notification attempts.
+3. Implement Google OAuth start/callback and post-OAuth routing.
 4. Store encrypted refresh tokens server-side.
 5. Add `GET /me`.
 6. Add `POST /youtube/disconnect`.
 7. Fetch authenticated channel identity.
 8. Fetch owned uploads through provider wrappers.
-9. Add a minimal frontend flow:
-   - Connect YouTube;
-   - select owned video;
-   - create analysis run.
+9. Create analysis runs and support `waiting_for_data`, linked retry, refresh, and manual-context revisions.
+10. Add Resend/fake email provider support for explicit per-run `Notify me`.
 
 Full diagnosis comes after this foundation is working.
 
@@ -241,6 +261,7 @@ The product is only valuable if creators trust it. The system should:
 
 - cite evidence;
 - expose uncertainty;
+- wait and retry when required data is delayed;
 - ask when data is missing;
 - distinguish deterministic findings from coaching suggestions;
 - avoid broad generic advice;

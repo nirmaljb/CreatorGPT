@@ -41,9 +41,11 @@ def _redirect_uri(request: Request) -> str:
     return settings.google_oauth_redirect_uri.strip() or str(request.url_for("google_oauth_callback"))
 
 
-def _frontend_url(params: dict[str, str]) -> str:
+def _frontend_url(params: dict[str, str], path: str = "/") -> str:
     base_url = get_settings().frontend_app_url.rstrip("/") or "http://localhost:3000"
-    return f"{base_url}?{urlencode(params)}"
+    normalized_path = path if path.startswith("/") else f"/{path}"
+    route_path = "" if normalized_path == "/" else normalized_path
+    return f"{base_url}{route_path}?{urlencode(params)}"
 
 
 def _connection_payload(oauth_token: dict | None) -> dict:
@@ -138,7 +140,7 @@ def google_oauth_callback(request: Request, code: str | None = None, state: str 
     if oauth_token["reconnect_required"] and not missing_required_scopes(granted_scopes):
         connection_status = CONNECTION_RECONNECT_REQUIRED
     response = RedirectResponse(
-        _frontend_url({"auth": "connected", "connection": connection_status}),
+        _frontend_url({"auth": "connected", "connection": connection_status}, path="/app"),
         status_code=status.HTTP_303_SEE_OTHER,
     )
     set_auth_cookies(response, session_token=session_token, csrf_token=csrf_token)

@@ -12,6 +12,8 @@ Pivot planning and documentation reset.
 - The central product object is now planned as `analysis_run`, not `session_id`.
 - YouTube OAuth is required for MVP because reliable diagnosis depends on authenticated creator analytics.
 - The system must analyze first and ask the user targeted questions only when evidence is insufficient.
+- The user-facing product name is Candor.
+- Delayed required YouTube data should use `waiting_for_data`, lightweight durable retry metadata, and explicit per-run `Notify me` rather than weak limited reports.
 
 ## Completed Chunks
 
@@ -108,10 +110,27 @@ Pivot planning and documentation reset.
   - the product must not market itself as a clickbait title generator, thumbnail generator, generic AI coach, or way to copy large creators' videos or style;
   - the tone should be direct and useful like an experienced creator friend, not flattering, gimmicky, or performatively "brutally honest";
   - the diagnosis should stay grounded in the creator's own channel, own videos, audience patterns, and evidence limits.
+- Wrote a new Candor multi-page SaaS PRD in `issues/prd.md` from the accepted grilling decisions:
+  - product name, positioning, route split, landing structure, auth trust page, app workflow, report hierarchy, insufficient-evidence behavior, learning mode, waiting-for-data flow, per-run notification consent, Resend email provider boundary, settings/deletion scope, admin tooling, visual system, typography, testing strategy, and out-of-scope boundaries;
+  - recreated the missing local `issues/` directory for the PRD entry point.
+- Consolidated the Candor grilling decisions into canonical markdown docs:
+  - `AGENTS.md` now names Candor, adds `waiting_for_data`, per-run `Notify me`, Resend/fake email provider rules, route split, visual system, and typography requirements;
+  - `.codex/PRODUCT_SPEC.md` now reflects Candor positioning, landing copy, route responsibilities, video-selection shape, optional context, waiting-data behavior, report hierarchy, visual system, and transactional email scope;
+  - `.codex/ARCHITECTURE.md` now documents frontend route architecture, `waiting_for_data`, retry metadata, notification attempts, email provider boundary, report UI hierarchy, and visual/UX system;
+  - `.codex/PLANS.md` now folds the Candor shell, waiting-data state, retry metadata, explicit notification consent, and transactional email into the implementation milestones;
+  - `README.md` now introduces Candor, links the PRD, updates MVP must-haves, API direction, env vars, and first implementation milestone;
+  - `docs/FAQ.md` was replaced with a Candor-focused FAQ instead of the legacy two-video comparison FAQ.
+- Added a completely separate `/login` sign-in page:
+  - `/login` is now the focused Google sign-in surface with session checking, OAuth-unavailable messaging, missing-scope display, and a link to `/auth` for permission details;
+  - public `Connect YouTube` CTAs and unauthenticated app access now point to `/login`;
+  - `/auth` remains the Google/YouTube trust and permission detail page;
+  - frontend OAuth start now accepts an allowlisted `returnTo` fallback for `/login` or `/auth`;
+  - successful backend OAuth callback now redirects to `/app`;
+  - route-contract docs were updated across `AGENTS.md`, `.codex/PRODUCT_SPEC.md`, `.codex/ARCHITECTURE.md`, `.codex/PLANS.md`, `README.md`, `docs/FAQ.md`, and `issues/prd.md`.
 
 ## Current Next Step
 
-Continue the SaaS frontend design grilling, then implement the accepted route split alongside `issues/001-connect-youtube-oauth-and-session-shell.md`.
+Continue the Candor skeleton beyond auth routing: channel connection, owned upload selection, and honest analysis-run progress states.
 
 Implementation must enforce the accepted MVP constraints above while building this skeleton.
 
@@ -127,7 +146,9 @@ Implementation must enforce the accepted MVP constraints above while building th
 - Report feedback storage and copied-output tracking are not implemented yet.
 - Linked retry for failed analysis runs is not implemented yet.
 - Linked refresh and manual-context revision runs are not implemented yet.
-- Local `.env` currently lacks Google OAuth client credentials; until `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` are populated, `/auth/google/start` correctly returns `Google OAuth is not configured`.
+- `waiting_for_data`, retry metadata, delayed-run check, and `Check again now` are not implemented yet.
+- Resend/fake email provider and per-run `Notify me` are not implemented yet.
+- Local `.env` currently lacks Google OAuth client credentials and token encryption config; until `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and `TOKEN_ENCRYPTION_KEY` are populated, local OAuth cannot complete. OAuth start correctly returns `Google OAuth is not configured`.
 
 ## Verification
 
@@ -175,3 +196,26 @@ Implementation must enforce the accepted MVP constraints above while building th
     - `npm run lint` passed in `frontend`.
     - `git diff --check` passed.
     - `curl -D - http://127.0.0.1:3000/auth/google/start` now redirects to `/?auth=unavailable&reason=Google+OAuth+is+not+configured` in this local environment.
+  - Candor PRD chunk verification:
+    - `issues/prd.md` was written with the accepted multi-page SaaS decisions from the grilling session.
+    - `issues/prd.md` is 373 lines.
+    - `git diff --check -- issues/prd.md .codex/Progress.md` passed.
+    - `frontend/node_modules/.bin/markdownlint-cli2 issues/prd.md` passed with 0 errors.
+  - Candor markdown consolidation verification:
+    - `git diff --check -- AGENTS.md .codex/PRODUCT_SPEC.md .codex/ARCHITECTURE.md .codex/PLANS.md .codex/Progress.md README.md docs/FAQ.md issues/prd.md` passed.
+    - `frontend/node_modules/.bin/markdownlint-cli2 AGENTS.md .codex/PRODUCT_SPEC.md .codex/ARCHITECTURE.md .codex/PLANS.md .codex/Progress.md README.md docs/FAQ.md issues/prd.md` passed with 0 errors.
+    - Stale-term scan found only the intentional `Signal Room` implementation note in `issues/prd.md`.
+  - Separate `/login` page verification:
+    - `backend/.venv/bin/python -m pytest backend/tests/test_auth_oauth.py` passed.
+    - `npm run typecheck` passed in `frontend`.
+    - `npm run lint` passed in `frontend`.
+    - `npm run build` passed in `frontend`; Next listed `/login` alongside `/`, `/auth`, `/app`, and `/faq`.
+    - `git diff --check` passed.
+    - `frontend/node_modules/.bin/markdownlint-cli2 AGENTS.md .codex/PRODUCT_SPEC.md .codex/ARCHITECTURE.md .codex/PLANS.md README.md docs/FAQ.md issues/prd.md .codex/Progress.md` passed with 0 errors.
+    - Next dev server started at `http://127.0.0.1:3200` after localhost binding escalation.
+    - `curl -I http://127.0.0.1:3200/login` returned HTTP 200.
+    - Rendered `/login` HTML contains the focused login shell and `href="/auth/google/start?returnTo=/login"`.
+    - `curl -D - 'http://127.0.0.1:3200/auth/google/start?returnTo=/login'` returned HTTP 303 to `/login?auth=unavailable&reason=Google+OAuth+is+not+configured` in the current local env.
+    - An existing local server at `http://127.0.0.1:3000` also returned HTTP 200 for `/login` and rendered the new login shell.
+    - In-app Browser visual verification could not run because the Browser plugin still reported no available `iab` instance.
+    - The local Next dev server on port 3200 was stopped after verification.

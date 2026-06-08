@@ -2,37 +2,83 @@ import Link from "next/link";
 
 const faqs = [
   {
-    question: "Why does the product not compare creators to big channels by default?",
-    answer: [
-      "The product is designed to help creators understand their own videos, audience, taste, and channel patterns. Larger channels often have different audiences, budgets, formats, publishing history, and distribution context, so using them as the default benchmark can push creators toward imitation instead of useful learning.",
-      "The default comparison should be the creator's own channel baseline and the selected video's actual evidence. If a creator does not have enough channel history, the product should produce a learning-mode report instead of pretending a big-channel comparison is a reliable diagnosis.",
-      "Creators can add reference videos later, but those references should be treated as study material, not standards they must copy. The product should extract transferable mechanics, tradeoffs, and risks of imitation while preserving the creator's own intent and style."
-    ]
+    question: "Why does Candor need OAuth?",
+    answer:
+      "Public video data cannot show the private analytics needed for a reliable diagnosis. OAuth lets Candor compare one owned upload against your own channel baseline with read-only access."
+  },
+  {
+    question: "What data does Candor read?",
+    answer:
+      "Candor asks for Google identity, YouTube channel/video metadata, and YouTube Analytics signals. It uses that evidence to build a report for the selected video."
+  },
+  {
+    question: "What will Candor never do?",
+    answer:
+      "Candor will not upload, edit, delete, manage captions, request revenue metrics, expose tokens to the browser, or continuously sync the whole channel."
+  },
+  {
+    question: "Why compare against my channel instead of bigger creators?",
+    answer:
+      "Large channels usually have different audiences, budgets, formats, history, and distribution context. Your own baseline is a better default because it respects your audience and style."
+  },
+  {
+    question: "Why might Candor say we do not know yet?",
+    answer:
+      "A primary bottleneck needs enough evidence. If core analytics, baseline history, ownership checks, or content signals are missing, Candor should show hypotheses and targeted asks instead of forcing certainty."
+  },
+  {
+    question: "Why are Shorts excluded?",
+    answer:
+      "The MVP diagnosis is built for long-form videos. Shorts use different viewing patterns, baselines, and assumptions, so Candor should not apply long-form rules to them."
+  },
+  {
+    question: "Does Candor generate titles or thumbnails?",
+    answer:
+      "No. Candor may give evidence-based follow-through after a report, but it is not a clickbait title generator, thumbnail generator, or tool for copying larger creators."
+  },
+  {
+    question: "How do I disconnect or delete analysis data?",
+    answer:
+      "Those trust controls belong in creator settings as the product matures. Disconnect should stop future access, while delete-analysis-data should remove stored reports and evidence."
   }
 ];
+
+export const metadata = {
+  title: "FAQ | Candor",
+  description: "Candor trust, OAuth, evidence, and product-boundary questions."
+};
 
 export default function FaqPage() {
   return (
     <main className="faq-shell" id="main-content">
-      <header className="faq-header">
-        <Link className="back-link" href="/">
-          Back to connection
+      <header className="simple-topbar">
+        <Link className="brand-link" href="/" aria-label="Candor home">
+          <span className="brand-mark" aria-hidden="true">
+            C
+          </span>
+          <span>Candor</span>
         </Link>
-        <p className="eyebrow">Product FAQ</p>
-        <h1>How this product thinks about creator growth</h1>
-        <p className="faq-intro">
-          The product is built around evidence, creator intent, and channel-specific learning rather than defaulting to
-          imitation of larger channels.
-        </p>
+        <nav className="utility-nav" aria-label="Secondary navigation">
+          <Link className="text-link" href="/login">
+            Connect YouTube
+          </Link>
+        </nav>
       </header>
+
+      <section className="faq-hero" aria-labelledby="faq-title">
+        <p className="eyebrow">Trust FAQ</p>
+        <h1 id="faq-title">How Candor uses YouTube evidence.</h1>
+        <p>
+          Candor is built around a narrow read-only trust boundary, channel-relative diagnosis, and honest uncertainty
+          when evidence is incomplete.
+        </p>
+      </section>
 
       <section className="faq-list" aria-label="Frequently asked questions">
         {faqs.map((item) => (
           <article className="faq-item" key={item.question}>
             <h2>{item.question}</h2>
-            {item.answer.map((paragraph) => (
-              <p key={paragraph}>{paragraph}</p>
-            ))}
+            <p>{item.answer}</p>
           </article>
         ))}
       </section>

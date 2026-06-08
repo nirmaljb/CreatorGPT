@@ -10,7 +10,7 @@
 
 ## Product Goal
 
-Build an OAuth-connected YouTube video performance diagnosis tool for serious creators.
+Build Candor, an OAuth-connected YouTube video performance diagnosis tool for serious creators.
 
 The product analyzes one underperforming YouTube video owned by the authenticated creator, compares it against the creator's own channel baseline, identifies the most likely performance bottleneck, and generates a structured post-mortem report with evidence, confidence, limitations, and a next-video improvement plan.
 
@@ -31,22 +31,47 @@ This is not a generic video chatbot and not the old YouTube/Instagram comparison
 - The OAuth consent screen can start in Testing mode with allowlisted users.
 - Users connect YouTube, select an owned channel video, and receive an automatic diagnosis report.
 - MVP diagnosis is long-form-only. Detect Shorts and exclude them from diagnosis rather than applying long-form assumptions.
-- MVP analysis execution uses FastAPI background tasks with explicit `analysis_run` statuses: `queued`, `running`, `needs_input`, `completed`, and `failed`. Keep the state machine queue-ready, but do not add a durable queue until the product workflow is validated.
+- MVP analysis execution uses explicit `analysis_run` statuses: `queued`, `running`, `waiting_for_data`, `needs_input`, `completed`, and `failed`.
+- FastAPI background tasks are acceptable for immediate execution, but delayed required YouTube Analytics or baseline data must use lightweight durable retry metadata on `analysis_run`; do not add a full queue system until the product workflow is validated.
 - Retrying a failed analysis must create a new `analysis_run` linked by `parent_analysis_run_id`; do not mutate old snapshots or failure records.
 - Refreshing analytics or adding manual context that changes interpretation must also create a linked run with `run_reason` set to `refresh` or `manual_context_revision`.
 - The system should analyze first and ask clarifying questions only when data is insufficient for a reliable conclusion.
 - The default comparison window is the first 7 completed days after publish. Videos from 72 hours to 7 days old can receive lower-confidence early-read reports; videos under 72 hours should generally not receive a primary bottleneck.
 - If evidence is insufficient, the product must say so and ask targeted questions instead of producing a weak diagnosis.
+- If required core analytics, baseline, selected-video metadata, or ownership/channel verification data is unavailable or partially missing, retry collection and use `waiting_for_data` instead of producing a weak limited report.
+- If a run enters `waiting_for_data`, show a `Notify me` action. Email notification is per-run, explicit opt-in only, and should use the creator's verified Google email when available.
+- If required data remains unavailable after retry exhaustion, mark the run `failed` with a precise non-blaming reason; do not convert it into a weak diagnosis.
 - Follow-up chat must be grounded in the analysis snapshot unless the user explicitly refreshes data, adds manual context, or invokes a deeper analyzer.
 
 ## Frontend
-Always use the /web-design-guidelines and /frontend-design skill for generating the frontend. Avoid creating AI sloppy design with colour AI Sloppy colour schema. Attempt to make UI/UX simple, clean, easily navigable and clutter free. 
 
-Always imagine that the user is completely dumb and don't would struggle if given more options to them. Provide them with the best options available. Keep the UI focused towards the main solution that we're providing.
+- Always use the `/web-design-guidelines` and `/frontend-design` skill for frontend generation or UI review.
+- Build a multi-page SaaS application with separate routes:
+  - `/` public landing page;
+  - `/login` focused sign-in page;
+  - `/auth` focused Google/YouTube trust and permission page;
+  - `/app` authenticated workspace for video selection and diagnosis;
+  - `/faq` supporting trust and education page.
+- Keep the UI focused on one job: answering "Why did my video not perform?"
+- Expose the best next action by default. Keep secondary options available but hidden behind buttons, menus, or expansion controls.
+- Do not bombard the user with dashboards, feature grids, visible advanced settings, or multiple analysis modes.
+- Be transparent about what data Candor reads, how it is used, and what it never does.
+- Candor must not market itself as a clickbait title generator, thumbnail generator, generic AI coach, or way to copy large creators' videos or style.
+- Product tone should feel like an experienced creator friend with evidence: direct, useful, and careful, not flattering, gimmicky, or performatively "brutally honest".
+- The first frontend implementation pass should build a polished static shell wired to current `/api/me` and OAuth start plumbing before pretending channel/video/report APIs exist.
 
-Always be transparent with the user about the data that we're collecting and how we're using it. 
+### Visual System
 
-Always prefer to create a multi-page saas application. 
+- Brand name: Candor.
+- Visual psychology: calm diagnostic workspace, not a roast, AI toy, or YouTube clone.
+- Red is reserved for errors only; avoid using YouTube red as a brand color.
+- Teal is a scarce truth accent and should not dominate surfaces.
+- Evidence blue is `#4B6B8C`.
+- Amber is reserved for uncertainty, limitations, and missing data.
+- Use Inter for product UI and prose with system sans fallback.
+- Use tabular numerals for all metrics, report numbers, progress states, tables, charts, and baseline comparisons.
+- Use a mono face only for timestamps, evidence IDs, raw metric labels, and compact diagnostic metadata.
+- Avoid serif headlines in the core app.
 
 ## Evidence Standard
 
@@ -113,6 +138,8 @@ Sub-agents should return compact JSON evidence, not long essays.
 - Never expose tokens to the frontend.
 - Never log tokens or raw OAuth credentials.
 - Add disconnect and delete-analysis-data paths early.
+- Transactional email is allowed only for explicit per-run notifications, failed-after-retry notifications, and deletion confirmations. Do not add newsletters, nudges, weekly reports, or marketing email.
+- Use Resend behind an email provider interface for MVP transactional email, with a fake provider for tests and local development.
 - Store immutable analysis snapshots, not an unlimited analytics warehouse.
 
 ## Data Policy
@@ -185,6 +212,7 @@ Expected new tables:
 - `analysis_report_feedback`
 - `analysis_followup_messages`
 - `analysis_usage_ledger`
+- `analysis_notification_attempts`
 
 Legacy session tables can remain temporarily during migration but should not drive new product behavior.
 

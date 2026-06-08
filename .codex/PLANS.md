@@ -21,6 +21,13 @@
 
 ### Scope
 
+- Build the Candor multi-page SaaS shell before deeper backend slices:
+  - public landing page at `/` with one report preview and one `Connect YouTube` CTA;
+  - focused sign-in page at `/login`;
+  - focused Google/YouTube trust and permission detail page at `/auth`;
+  - authenticated workspace shell at `/app`;
+  - expanded trust FAQ at `/faq`;
+  - Candor visual system with evidence blue `#4B6B8C`, scarce teal truth accents, amber uncertainty states, red errors only, Inter, tabular numerals, and mono timestamps/evidence IDs.
 - Add Alembic migration workflow.
 - Add schema for users, channels, OAuth tokens, and analysis runs.
 - Implement Google OAuth start/callback.
@@ -30,17 +37,11 @@
 - Add provider wrappers for YouTube channel identity and owned upload listing.
 - Support multiple authenticated YouTube channels with one active channel in the MVP UI.
 - Reject Shorts from MVP diagnosis.
-- Add explicit `analysis_run` statuses for FastAPI background-task execution.
+- Add explicit `analysis_run` statuses for analysis execution: `queued`, `running`, `waiting_for_data`, `needs_input`, `completed`, and `failed`.
+- Add lightweight durable retry metadata for delayed required data: `next_retry_at`, `retry_count`, and `last_data_wait_reason`.
 - Add linked retry semantics for failed analysis runs.
 - Add `run_reason` and linked-run semantics for refresh and manual-context revisions.
-- Add a minimal frontend path:
-  - public landing page at `/`;
-  - focused Google/YouTube authentication page at `/auth`;
-  - authenticated SaaS workspace at `/app`;
-  - anti-gimmick positioning that avoids clickbait-title, thumbnail-generator, and copy-big-creators promises;
-  - Connect YouTube;
-  - select owned video;
-  - create analysis run.
+- Add a minimal frontend product path: connect YouTube, select one owned long-form video, and create an analysis run.
 
 ### Acceptance Criteria
 
@@ -51,10 +52,12 @@
 - The frontend can list owned uploads.
 - Shorts are detected and excluded from diagnosis creation.
 - Creating an analysis run persists a row with `queued` or `running` status and returns an `analysis_run_id`.
+- Required analytics, baseline, selected-video metadata, or ownership/channel delays can move a run to `waiting_for_data` instead of producing a weak limited report.
 - Retrying a failed analysis run creates a new row with `parent_analysis_run_id`.
 - Refreshing or revising with manual context creates a new linked row with the appropriate `run_reason`.
 - Tests mock Google and YouTube providers.
 - The frontend route split keeps landing, authentication, and the working application separate.
+- The frontend avoids dashboard overload, visible scores, clickbait-generator framing, thumbnail-generator framing, and copy-big-creators framing.
 
 ## Milestone 2: Analysis Snapshot Foundation
 
@@ -76,7 +79,31 @@
 - Baseline uses the first 7 completed days by default and marks early-read runs.
 - Transcript chunks are tied to `analysis_run_id`.
 - Missing transcripts degrade content confidence without blocking analytics snapshots.
+- Missing required analytics or baseline data blocks final diagnosis, enters `waiting_for_data`, and resumes only after retry succeeds.
 - Provider-mocked tests cover video metadata, analytics snapshots, transcript fallback, and baseline selection.
+
+## Milestone 2A: Waiting Data And Transactional Notification
+
+### Scope
+
+- Implement `waiting_for_data` as a first-class run state.
+- Add retry scheduling metadata to waiting analysis runs.
+- Add a lightweight scheduled backend check for waiting runs.
+- Add `Check again now`.
+- Add explicit per-run `Notify me` consent.
+- Add an `EmailProvider` interface.
+- Add `ResendEmailProvider` and `FakeEmailProvider`.
+- Store notification attempts against `analysis_run_id`.
+- Send diagnosis-ready and retry-exhausted failure emails only when the user requested notification for that run.
+
+### Acceptance Criteria
+
+- Required analytics, baseline, selected-video metadata, and ownership/channel verification delays use `waiting_for_data`.
+- Transcript, comments, optional manual context, optional CTR, and optional impressions do not block a report after bounded retries.
+- Waiting runs survive API restarts through durable retry metadata.
+- Retry exhaustion becomes terminal `failed` with a precise non-blaming reason.
+- No email is sent unless the user clicks `Notify me` for that run.
+- Tests use the fake provider and do not call Resend.
 
 ## Milestone 3: Deterministic Diagnosis Engine
 
@@ -135,6 +162,10 @@
   - next-video plan;
   - hook/title/structure rewrites.
 - Render timestamped evidence cards with embedded YouTube player seek actions.
+- Render compact evidence strips by default and full evidence behind `View evidence`.
+- Use confidence labels with reasons, not percentages.
+- Do not render user-facing scores, grades, virality scores, hook scores, or thumbnail scores.
+- Keep follow-up chat as a secondary `Ask about this report` panel.
 - Validate strict report JSON and machine-readable citations before display.
 - Add deterministic fallback report when LLM report validation fails.
 - Add lightweight report feedback capture tied to `analysis_run_id`.
@@ -149,6 +180,8 @@
 - Report feedback records usefulness, perceived accuracy against YouTube Studio, optional notes, and copied-output events without mutating the diagnosis.
 - Follow-up answers cite stored analysis evidence.
 - Missing data prompts are targeted and actionable.
+- Insufficient evidence is a first-class report state with ranked hypotheses, missing evidence, and 1-3 targeted asks.
+- Title and packaging rewrites are presented as diagnosis follow-through, not a standalone generator.
 
 ## Milestone 6: Reliability, Privacy, And Demo Readiness
 
@@ -156,13 +189,14 @@
 
 - Add disconnect and delete-analysis-data verification.
 - Add provider-mocked CI coverage for the full analysis skeleton.
+- Add provider-mocked CI coverage for transactional email.
 - Add docs for OAuth setup and local development.
 - Remove or isolate old YouTube/Instagram comparison routes and UI.
 - Rehearse private-test demo.
 
 ### Acceptance Criteria
 
-- `make ci` passes without real Google, YouTube, Groq, Qdrant, or Neon credentials.
+- `make ci` passes without real Google, YouTube, Groq, Qdrant, Neon, or Resend credentials.
 - OAuth secrets are never logged.
 - Data deletion removes snapshots, comments, reports, vectors, and follow-ups.
 - Demo flow is stable for an allowlisted creator account.

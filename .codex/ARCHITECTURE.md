@@ -2,7 +2,7 @@
 
 ## Product Architecture Summary
 
-The pivot product is a YouTube performance diagnosis system. It is report-first, OAuth-connected, analytics-heavy, and LLM-assisted.
+The pivot product is Candor, a YouTube performance diagnosis system. It is report-first, OAuth-connected, analytics-heavy, and LLM-assisted.
 
 The central object is an `analysis_run`. A creator connects YouTube, selects one owned video, and the backend runs a background analysis job. The job fetches private analytics, builds a channel baseline, analyzes transcript and comments, applies deterministic evidence gates, and stores a reproducible analysis snapshot. The LLM turns the stored diagnosis JSON into a structured report and grounded follow-up answers.
 
@@ -21,13 +21,33 @@ MVP diagnosis is OAuth-first, owned-video, and long-form-only. Public URL analys
 - Transcription: YouTube transcript fast path, Groq `whisper-large-v3` fallback.
 - LLM: Groq chat model during MVP development, isolated behind a provider wrapper.
 - Embeddings: FastEmbed `BAAI/bge-small-en-v1.5` unless changed deliberately.
-- CI: provider-mocked tests for Google, YouTube, Groq, Qdrant, and Postgres-sensitive behavior.
+- Transactional email: Resend behind an email provider interface, with a fake provider for tests and local development.
+- CI: provider-mocked tests for Google, YouTube, Groq, Qdrant, Resend, and Postgres-sensitive behavior.
+
+## Frontend Route Architecture
+
+Candor uses separate pages for separate jobs:
+
+- `/` is the public landing page with the core promise, one report preview, and one `Connect YouTube` CTA.
+- `/login` is the focused sign-in page with one Google OAuth action.
+- `/auth` is the trust and permission detail page for Google/YouTube OAuth.
+- `/app` is the authenticated workspace for channel/video selection, analysis progress, reports, history, and settings.
+- `/faq` is a supporting trust and education page.
+
+Routing expectations:
+
+- unauthenticated `/app` visits go to `/login`;
+- connected `/auth` visits go to `/app`;
+- OAuth success goes to `/app`;
+- incomplete scopes or reconnect-required states go to `/auth`.
+
+The first implementation pass should build a polished static shell wired to current session/OAuth plumbing before real channel, upload, report, and settings APIs are fully available.
 
 ## Runtime Flow
 
 ```mermaid
 flowchart TD
-    user["Creator"] --> login["Connect YouTube"]
+    user["Creator"] --> login["/login"]
     login --> oauth["Google OAuth callback"]
     oauth --> token["Store encrypted refresh token"]
     token --> channel["Fetch authenticated channel"]
@@ -43,7 +63,12 @@ flowchart TD
     job --> comments["Audience Signals Agent"]
     job --> packaging["Packaging Analyzer"]
 
-    analytics --> diagnosis["Diagnosis Orchestrator"]
+    analytics --> wait{"Required data delayed?"}
+    baseline --> wait
+    wait -->|Yes| waiting["waiting_for_data"]
+    waiting --> retry["Durable retry check"]
+    retry --> job
+    wait -->|No| diagnosis["Diagnosis Orchestrator"]
     baseline --> diagnosis
     transcript --> structure["Content Structure Analyzer"]
     structure --> diagnosis
@@ -56,6 +81,7 @@ flowchart TD
     report --> ui["Report UI"]
     insufficient --> ui
     ui --> chat["Grounded follow-up chat"]
+    waiting --> notify["Optional per-run Notify me"]
 ```
 
 ## Core Backend Domains
@@ -98,17 +124,24 @@ Responsibilities:
 - store run configuration;
 - own all snapshots, reports, comments, chunks, and follow-up messages.
 
-MVP execution uses FastAPI background tasks, not a durable queue. The `analysis_run` state machine must be explicit enough to migrate later to Celery, RQ, Cloud Tasks, or another durable runner without changing frontend APIs.
+MVP execution uses FastAPI background tasks for immediate work and lightweight durable retry metadata for delayed required data. Do not add a full queue system yet. The `analysis_run` state machine must be explicit enough to migrate later to Celery, RQ, Cloud Tasks, or another durable runner without changing frontend APIs.
 
 Expected statuses:
 
 - `queued`
 - `running`
+- `waiting_for_data`
 - `needs_input`
 - `completed`
 - `failed`
 
 Analyzer steps should be idempotent where practical. Do not silently retry a whole run forever; record step-level failures, retry bounded transient operations, and surface a readable terminal failure when needed.
+
+`waiting_for_data` is used when required selected-video metadata, ownership/channel verification, authenticated YouTube Analytics signals, or baseline candidate data is delayed or partially missing after bounded immediate retries. It is not a failure and not a request for manual input. Waiting runs store `next_retry_at`, `retry_count`, and `last_data_wait_reason`; a lightweight scheduled backend job checks waiting runs and resumes analysis when required data becomes available.
+
+Transcript, comments, optional manual context, optional CTR, and optional impressions are non-blocking after bounded retries. They may limit evidence quality or trigger targeted asks, but they should not move a run to `waiting_for_data` when core analytics and baseline evidence are available.
+
+If required data remains unavailable after retry exhaustion, the run becomes `failed` with a precise, non-blaming reason. Do not convert it into a weak report.
 
 Whole-run retry, refresh, and manual-context revision create a new `analysis_run` linked to the prior run with `parent_analysis_run_id`. The prior run remains immutable for auditability. Retries may reuse safe cached artifacts such as metadata or transcript, but the new run must record what was reused. Refreshes should fetch fresh private analytics. Manual context that changes interpretation should create a revision, not silently mutate the original report.
 
@@ -146,6 +179,20 @@ The backend validates report JSON before display. Validation checks required sec
 Chat is attached to a report. It can explain, rewrite, and reformat within the analysis snapshot. It cannot invent fresh analytics.
 
 Fresh analytics, changed diagnosis, manual context enrichment, and refresh flows must create explicit new analysis events or revisions rather than silently mutating the original report.
+
+### Transactional Notifications
+
+Email notification is per-run and explicit. Candor does not automatically email users about delayed analysis.
+
+Responsibilities:
+
+- show `Notify me` only when a run is in `waiting_for_data` and the user has a verified email and email provider support is configured;
+- store notification request timestamp and target email on the run or a related notification table;
+- send diagnosis-ready and exhausted-retry failure emails only for runs where notification was requested;
+- use Resend through an `EmailProvider` interface in real environments;
+- use a fake email provider for tests and local development;
+- record notification attempts against `analysis_run_id`;
+- avoid newsletters, weekly reports, nudges, and marketing messages.
 
 ## Expected Database Tables
 
@@ -194,6 +241,11 @@ Access tokens should not be persisted unless there is a specific need. Refresh t
 - `status`
 - `current_step`
 - `progress_percent`
+- `next_retry_at`
+- `retry_count`
+- `last_data_wait_reason`
+- `email_notification_requested_at`
+- `email_notification_address`
 - `started_at`
 - `completed_at`
 - `failed_at`
@@ -335,6 +387,21 @@ Feedback is product-validation data. It should not mutate the diagnosis, become 
 - `created_at`
 - `updated_at`
 
+### `analysis_notification_attempts`
+
+- `id`
+- `analysis_run_id`
+- `notification_type`
+- `provider`
+- `target_email`
+- `status`
+- `provider_message_id`
+- `error`
+- `created_at`
+- `sent_at`
+
+Notification attempts are transactional audit records. They are not marketing preferences and should not be used to infer product engagement.
+
 ## Vector Payload
 
 Transcript and evidence chunks should use `analysis_run_id`, not legacy `session_id`.
@@ -380,6 +447,8 @@ Expected MVP endpoints:
 - `POST /analysis-runs/{analysis_run_id}/manual-evidence`
 - `POST /analysis-runs/{analysis_run_id}/refresh`
 - `POST /analysis-runs/{analysis_run_id}/retry`
+- `POST /analysis-runs/{analysis_run_id}/notify`
+- `POST /analysis-runs/{analysis_run_id}/check-now`
 - `POST /analysis-runs/{analysis_run_id}/followups`
 
 Legacy `/ingest`, `/status/{session_id}`, `/messages/{session_id}`, and `/chat` can remain temporarily while migration is underway, but new product work should target the `analysis-runs` API.
@@ -484,7 +553,7 @@ Otherwise, the report must use the insufficient-evidence structure.
 
 If there are fewer than 5 comparable prior long-form videos, the run can complete but cannot name a confident primary bottleneck. With `0-2` comparable videos, show no primary diagnosis. With `3-4`, show low-confidence ranked hypotheses.
 
-Confidence is stored as both `confidence_score` (`0.0-1.0`) and `confidence_label` (`low`, `medium`, `medium_high`, `high`). User-facing reports should show labels and reasons, not percentages.
+Confidence is stored as both `confidence_score` (`0.0-1.0`) and `confidence_label`. User-facing reports should show `High confidence`, `Medium confidence`, `Low confidence`, or `Insufficient evidence`, always with a reason and never as percentages.
 
 ## Baseline And Window Policy
 
@@ -507,6 +576,12 @@ Evidence cards should include:
 - interpretation;
 - recommended action;
 - machine-readable citations.
+
+The first report screen should prioritize the answer, confidence, and evidence quality before advice. Show the video title and thumbnail, primary bottleneck or `No confident primary bottleneck yet`, confidence label and reason, evidence quality strip, one short interpretation paragraph, and one primary next action.
+
+The report page should not become an analytics dashboard. Compact raw evidence is visible by default; full metric tables, baseline membership, retention point details, comment samples, and citation mapping live behind `View evidence`.
+
+Charts are sparse and takeaway-led: one retention-vs-baseline line chart when available, small baseline bars for a few key metrics, and a plain-language takeaway beside each chart.
 
 ## Citation Schema
 
@@ -553,6 +628,21 @@ Deletion must remove DB rows and Qdrant vectors for reports, snapshots, comments
 - OAuth scopes are read-only in MVP and requested during initial YouTube connection.
 - Disconnect revokes or invalidates stored OAuth access.
 - Delete-data flow removes stored reports, snapshots, comments, vectors, and follow-up messages for the user.
+- Transactional email uses the verified Google email only after explicit per-run `Notify me` consent.
+
+## Visual And UX System
+
+- Brand name: Candor.
+- Tone: experienced creator friend with evidence, not flattery, gimmicks, or "brutally honest" theater.
+- Primary user question: `Why did this video underperform?`
+- Red is reserved for errors only.
+- Teal is a scarce truth accent.
+- Evidence blue is `#4B6B8C`.
+- Amber indicates uncertainty, limitations, or missing data.
+- Inter is the UI/prose font with system sans fallback.
+- Metrics use tabular numerals everywhere.
+- Timestamps, evidence IDs, raw metric labels, and compact diagnostic metadata use a mono face.
+- Avoid user-facing numeric scores, grades, and confidence percentages.
 
 ## Migration Notes
 

@@ -1,175 +1,53 @@
-"use client";
-
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
 
-type ConnectionStatus = "connected" | "incomplete_scopes" | "reconnect_required" | "disconnected";
-
-type MeResponse = {
-  authenticated: boolean;
-  user: {
-    id: string;
-    email: string | null;
-    email_verified: boolean;
-    name: string | null;
-    avatar_url: string | null;
-  } | null;
-  youtube: {
-    connection_status: ConnectionStatus;
-    granted_scopes: string[];
-    missing_scopes: string[];
-    reconnect_needed: boolean;
-    last_verified_at: string | null;
-  };
-  csrf_token: string | null;
-};
-
-const scopeRows = [
+const reportEvidence = [
   {
-    label: "Google identity",
-    detail: "Confirms who is signed in with name, email, and profile identity.",
-    access: "Identity"
+    label: "Known",
+    detail: "First 7 completed days, owned upload metadata, 8 comparable long-form videos."
   },
   {
-    label: "YouTube channel access",
-    detail: "Reads channel and video metadata for videos you own.",
-    access: "Read only"
+    label: "Suggested",
+    detail: "Retention appears to drop before the video delivers the promised payoff."
   },
   {
-    label: "YouTube Analytics",
-    detail: "Reads private performance metrics needed for channel-relative diagnosis.",
-    access: "Private metrics"
+    label: "Not known yet",
+    detail: "No CTR or impressions context, so Candor should not blame packaging."
   }
 ];
 
-const guardrails = [
+const steps = [
   {
-    title: "Read-only scope",
-    detail: "No upload, edit, delete, caption-management, or channel-management permission."
+    title: "Connect read-only YouTube",
+    detail: "Candor uses OAuth because reliable diagnosis needs private creator analytics, not public guesswork."
   },
   {
-    title: "No money metrics",
-    detail: "Revenue and monetary analytics scopes are not requested for this MVP."
+    title: "Pick one owned long-form video",
+    detail: "The workspace stays focused on the video you want to understand instead of opening a dashboard."
   },
   {
-    title: "Server-side tokens",
-    detail: "Refresh tokens stay off the browser and are encrypted before storage."
+    title: "Get the clearest report evidence supports",
+    detail: "If the data is incomplete, Candor says what is missing and asks only targeted follow-up questions."
   }
 ];
 
-const readinessSteps = [
-  {
-    stage: "01",
-    title: "Connect",
-    detail: "Verify the creator account with read-only Google and YouTube access."
-  },
-  {
-    stage: "02",
-    title: "Select",
-    detail: "Choose one owned long-form upload for diagnosis."
-  },
-  {
-    stage: "03",
-    title: "Diagnose",
-    detail: "Compare against channel baseline evidence before naming a bottleneck."
-  }
+const notRows = [
+  "No clickbait title generator",
+  "No thumbnail gimmick tool",
+  "No copying bigger creators",
+  "No fake certainty",
+  "No generic AI coach"
 ];
-
-const CONNECT_URL = "/auth/google/start";
-
-function statusLabel(status: ConnectionStatus) {
-  if (status === "connected") return "Connected";
-  if (status === "incomplete_scopes") return "Access incomplete";
-  if (status === "reconnect_required") return "Reconnect needed";
-  return "Not connected";
-}
-
-function statusCopy(me: MeResponse | null) {
-  if (!me?.authenticated) return "Connect YouTube to start with private creator analytics.";
-  if (me.youtube.connection_status === "connected") return "Your account is ready for channel selection.";
-  if (me.youtube.connection_status === "incomplete_scopes") {
-    return "Some required read-only scopes were not granted. Reconnect to continue.";
-  }
-  if (me.youtube.connection_status === "reconnect_required") {
-    return "The connection needs a fresh consent grant before analysis can start.";
-  }
-  return "You are signed in, but YouTube is not connected.";
-}
-
-function actionLabel(me: MeResponse | null, loading: boolean) {
-  if (loading) return "Continue with Google";
-  if (me?.youtube.reconnect_needed) return "Reconnect YouTube";
-  if (me?.youtube.connection_status === "connected") return "Review YouTube access";
-  return "Connect YouTube";
-}
 
 export default function Home() {
-  const [me, setMe] = useState<MeResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [authStartError, setAuthStartError] = useState<string | null>(null);
-
-  const loadMe = useCallback(async () => {
-    setError(null);
-    try {
-      const response = await fetch("/api/me", {
-        credentials: "include",
-        cache: "no-store"
-      });
-      if (!response.ok) throw new Error("Connection status is unavailable.");
-      setMe((await response.json()) as MeResponse);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Connection status is unavailable.");
-      setMe(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadMe();
-  }, [loadMe]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("auth") !== "unavailable") return;
-    setAuthStartError(params.get("reason") || "Google OAuth start is unavailable.");
-  }, []);
-
-  const connectionStatus = me?.youtube.connection_status ?? "disconnected";
-  const missingScopes = me?.youtube.missing_scopes ?? [];
-  const grantedScopes = me?.youtube.granted_scopes ?? [];
-  const visibleError = error || authStartError;
-  const lastVerified = useMemo(() => {
-    const rawValue = me?.youtube.last_verified_at;
-    if (!rawValue) return null;
-
-    const date = new Date(rawValue);
-    if (Number.isNaN(date.getTime())) return null;
-
-    return {
-      dateTime: rawValue,
-      label: new Intl.DateTimeFormat(undefined, {
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        month: "short"
-      }).format(date)
-    };
-  }, [me?.youtube.last_verified_at]);
-
   return (
-    <main className="creator-shell" id="main-content">
-      <header className="creator-topbar">
-        <div className="brand-lockup">
+    <main className="landing-shell" id="main-content">
+      <header className="simple-topbar">
+        <Link className="brand-link" href="/" aria-label="Candor home">
           <span className="brand-mark" aria-hidden="true">
-            YD
+            C
           </span>
-          <div>
-            <p className="eyebrow">YouTube diagnosis concierge</p>
-            <p className="product-name">Signal Room</p>
-          </div>
-        </div>
+          <span>Candor</span>
+        </Link>
         <nav className="utility-nav" aria-label="Secondary navigation">
           <Link className="text-link" href="/faq">
             FAQ
@@ -177,22 +55,67 @@ export default function Home() {
         </nav>
       </header>
 
-      <section className="hero-panel" aria-labelledby="connect-title">
-        <div className="hero-copy">
-          <p className="eyebrow">Creator-owned evidence</p>
-          <h1 id="connect-title">Diagnose the video with your channel&apos;s real baseline.</h1>
-          <p>
-            Start with OAuth so the report can use private analytics, owned-video metadata, and a baseline that belongs
-            to the creator instead of public guesswork.
-          </p>
+      <section className="landing-hero" aria-labelledby="hero-title">
+        <p className="eyebrow">YouTube diagnosis for serious creators</p>
+        <h1 id="hero-title">Why did this video underperform?</h1>
+        <p>
+          Candor connects to your YouTube channel, compares one owned long-form upload against your own baseline, and
+          gives the clearest diagnosis the evidence can support.
+        </p>
+        <div className="hero-actions">
+          <Link className="primary-action" href="/login">
+            Connect YouTube
+          </Link>
+          <Link className="text-link" href="/faq">
+            Read the trust FAQ
+          </Link>
+        </div>
+      </section>
+
+      <section className="report-preview-band" aria-labelledby="preview-title">
+        <div className="section-heading">
+          <p className="eyebrow">Report preview</p>
+          <h2 id="preview-title">The answer starts with evidence, not a score.</h2>
         </div>
 
-        <ol className="readiness-rail" aria-label="Analysis readiness">
-          {readinessSteps.map((step) => (
-            <li key={step.stage}>
-              <span className="step-index">{step.stage}</span>
+        <article className="report-preview" aria-label="Sample Candor report preview">
+          <div className="report-preview-header">
+            <div>
+              <span className="metadata-label">Sample report</span>
+              <h3>Likely bottleneck: Hook expectation gap</h3>
+            </div>
+            <span className="confidence-tag">Medium evidence</span>
+          </div>
+          <p className="report-answer">
+            Based on available signals, the video likely lost momentum before viewers reached the promised payoff.
+            Packaging is not the leading explanation without click-opportunity evidence.
+          </p>
+          <div className="evidence-preview-list">
+            {reportEvidence.map((row) => (
+              <div className="evidence-preview-row" key={row.label}>
+                <span>{row.label}</span>
+                <p>{row.detail}</p>
+              </div>
+            ))}
+          </div>
+          <div className="timestamp-strip" aria-label="Cited evidence examples">
+            <span>[Retention: 00:15-00:30]</span>
+            <span>[Baseline: 8 prior long-form videos]</span>
+          </div>
+        </article>
+      </section>
+
+      <section className="process-band" aria-labelledby="process-title">
+        <div className="section-heading">
+          <p className="eyebrow">How it works</p>
+          <h2 id="process-title">One job, one video, one report.</h2>
+        </div>
+        <ol className="process-list">
+          {steps.map((step, index) => (
+            <li key={step.title}>
+              <span>{String(index + 1).padStart(2, "0")}</span>
               <div>
-                <h2>{step.title}</h2>
+                <h3>{step.title}</h3>
                 <p>{step.detail}</p>
               </div>
             </li>
@@ -200,96 +123,30 @@ export default function Home() {
         </ol>
       </section>
 
-      <section className="connect-grid" aria-labelledby="connection-heading">
-        <div className="connect-primary">
-          <div className={`status-card ${connectionStatus}`} aria-busy={loading} aria-live="polite">
-            <div className="connection-state">
-              <span className={`state-dot ${connectionStatus}`} aria-hidden="true" />
-              <span>{loading ? "Checking connection…" : statusLabel(connectionStatus)}</span>
-            </div>
-            <h2 id="connection-heading">Connection readiness</h2>
-            <p className="connect-copy">{loading ? "Checking your server-side session…" : statusCopy(me)}</p>
-            {lastVerified && (
-              <p className="last-verified">
-                Last verified <time dateTime={lastVerified.dateTime}>{lastVerified.label}</time>
-              </p>
-            )}
-          </div>
+      <section className="anti-gimmick-band" aria-labelledby="not-title">
+        <div className="section-heading">
+          <p className="eyebrow">What Candor is not</p>
+          <h2 id="not-title">Better diagnosis without creator imitation.</h2>
+        </div>
+        <ul>
+          {notRows.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </section>
 
-          {me?.user && (
-            <div className="identity-strip" aria-label="Signed-in identity">
-              <span className="avatar-mark" aria-hidden="true">
-                {(me.user.name || me.user.email || "G").slice(0, 1).toUpperCase()}
-              </span>
-              <div>
-                <strong>{me.user.name || me.user.email || "Google account"}</strong>
-                {me.user.email && <span>{me.user.email}</span>}
-              </div>
-            </div>
-          )}
-
-          {visibleError && (
-            <p className="status-message error" role="alert">
-              {visibleError}
-            </p>
-          )}
-          {missingScopes.length > 0 && (
-            <div className="status-message warn" role="status">
-              <strong>Missing required access</strong>
-              <span>{missingScopes.join(", ")}</span>
-            </div>
-          )}
-
-          <a className="connect-button" href={CONNECT_URL} aria-describedby="connect-help">
-            <span>{actionLabel(me, loading)}</span>
-            <span className="button-arrow" aria-hidden="true">
-              -&gt;
-            </span>
-          </a>
-          <p className="action-help" id="connect-help">
-            Opens Google consent for the narrow read-only scopes listed here.
+      <footer className="trust-footer">
+        <div>
+          <strong>Read-only by design.</strong>
+          <p>
+            Candor will not upload, edit, delete, manage captions, read revenue metrics, or expose tokens to the
+            browser.
           </p>
         </div>
-
-        <aside className="scope-panel" aria-labelledby="scope-heading">
-          <p className="panel-kicker">Requested access</p>
-          <h2 id="scope-heading">Only the evidence needed for diagnosis</h2>
-          <div className="scope-list">
-            {scopeRows.map((scope) => (
-              <div className="scope-row" key={scope.label}>
-                <div>
-                  <h3>{scope.label}</h3>
-                  <p>{scope.detail}</p>
-                </div>
-                <span>{scope.access}</span>
-              </div>
-            ))}
-          </div>
-        </aside>
-      </section>
-
-      <section className="guardrail-band" aria-label="Access guardrails">
-        {guardrails.map((item) => (
-          <article key={item.title}>
-            <h2>{item.title}</h2>
-            <p>{item.detail}</p>
-          </article>
-        ))}
-      </section>
-
-      {grantedScopes.length > 0 && (
-        <section className="scope-audit" aria-label="Granted scopes">
-          <div>
-            <p className="panel-kicker">Granted scopes recorded</p>
-            <p>The backend stores the exact granted scope list and never returns OAuth tokens to this page.</p>
-          </div>
-          <ul>
-            {grantedScopes.map((scope) => (
-              <li key={scope}>{scope}</li>
-            ))}
-          </ul>
-        </section>
-      )}
+        <Link className="text-link" href="/auth">
+          Review access
+        </Link>
+      </footer>
     </main>
   );
 }

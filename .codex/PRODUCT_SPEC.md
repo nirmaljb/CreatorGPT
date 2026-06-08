@@ -1,8 +1,8 @@
-# Product Spec: YouTube Video Performance Diagnosis Tool
+# Product Spec: Candor YouTube Video Performance Diagnosis
 
 ## 1. Product Summary
 
-We are building an AI-assisted analytics product that helps serious YouTube creators understand why a video underperformed and what they should change in the next upload.
+We are building Candor, an AI-assisted analytics product that helps serious YouTube creators understand why a video underperformed and what they should change in the next upload.
 
 The product is a structured video post-mortem system, not a generic "chat with video" tool.
 
@@ -25,15 +25,16 @@ This video likely failed at the hook or retention stage. Here is the evidence, h
 Primary positioning:
 
 ```text
-AI video performance diagnosis for serious YouTube creators.
+Candor answers "Why did this video underperform?" with creator-owned evidence.
 ```
 
 Alternative positioning:
 
+- Frank, evidence-backed YouTube video diagnosis.
 - Turn failed YouTube videos into better next uploads.
 - Understand why your YouTube video underperformed.
 - Find where your video lost viewers and what to fix next.
-- AI post-mortems for YouTube creators.
+- YouTube post-mortems that admit what the evidence can and cannot support.
 
 This product is not:
 
@@ -50,6 +51,51 @@ This product is not:
 The product voice should feel like an experienced creator friend who is careful with the evidence: direct, useful, and honest about what it understands. It should not flatter the creator, market "brutally honest" takedowns, or give gimmicky answers. The product studies the creator's own channel, their own video style, and their own audience patterns, then explains what likely happened and what to try next.
 
 Landing-page positioning should stay focused on one promise: answer "Why did my video not perform?" with creator-owned evidence. The primary call to action is connecting YouTube. Supporting copy should explain read-only access, channel-relative baseline comparison, and the anti-imitation stance without presenting many competing options.
+
+Initial landing copy direction:
+
+- Headline: `Why did this video underperform?`
+- Subheadline: `Candor connects to your YouTube channel, compares one owned long-form video against your own baseline, and gives you the clearest diagnosis the evidence can support.`
+- CTA: `Connect YouTube`
+- Anti-gimmick line: `No clickbait titles. No thumbnail gimmicks. No copying bigger creators. Just a careful read on your video, your audience, and what to try next.`
+
+## 2.1 Product Experience And Visual System
+
+Candor is a multi-page SaaS application with clear route responsibilities:
+
+- `/` is a focused public landing page.
+- `/login` is a focused sign-in page with one Google OAuth action.
+- `/auth` is a Google/YouTube trust and permission detail page.
+- `/app` is the authenticated workspace for video selection and diagnosis.
+- `/faq` is a supporting trust and education page.
+
+The landing page should use five tight sections:
+
+1. Hero with the promise and one `Connect YouTube` CTA.
+2. One focused report preview artifact.
+3. How it works: connect, choose one video, get the diagnosis.
+4. What Candor is not: no clickbait titles, thumbnail gimmicks, copying big creators, or fake certainty.
+5. Trust footer: read-only access, no revenue metrics, disconnect/delete data.
+
+The landing page should not include pricing, testimonials, broad feature grids, dashboards, blog links, or secondary product modes in MVP.
+
+The visual system should feel like calm evidence:
+
+- Graphite or near-black for seriousness.
+- Clean off-white and light neutrals for breathing room.
+- Teal as a scarce truth accent, not a dominant surface color.
+- Evidence blue `#4B6B8C` for analytics and report evidence.
+- Amber for uncertainty, limitations, and missing data.
+- Red only for errors, never as the brand color.
+
+Typography is part of the trust system:
+
+- Use Inter for product UI and prose with system sans fallback.
+- Use tabular numerals for all metrics, report numbers, progress states, tables, charts, and baseline comparisons.
+- Use a mono face for timestamps, evidence IDs, raw metric labels, and compact diagnostic metadata.
+- Avoid serif headlines in the core app.
+
+Candor should not show user-facing scores, video grades, virality scores, hook scores, thumbnail scores, or confidence percentages.
 
 ## 3. Target Customer
 
@@ -126,6 +172,16 @@ The MVP contract is OAuth-first, owned-video, and long-form-only.
 
 ## 6. MVP Workflow
 
+### Step 0: Route Into The Right Page
+
+The public site, authentication, and working app should remain separate:
+
+- unauthenticated users who visit `/app` should be routed to `/login`;
+- the public `Connect YouTube` CTA should route to `/login`;
+- connected users who visit `/auth` should continue to `/app`;
+- successful OAuth should route to `/app`, not back to `/`;
+- incomplete scopes should route to `/auth` with a clear missing-access state.
+
 ### Step 1: Connect YouTube
 
 The user signs in with Google and grants read-only YouTube and YouTube Analytics access.
@@ -140,15 +196,17 @@ MVP scopes:
 
 ### Step 2: Select A Video
 
-The app lists owned videos from the connected channel. The user selects one video to diagnose.
+The app lists owned videos from the connected channel. The user selects one video to diagnose. The authenticated app should open as a focused video-selection workflow, not a dashboard.
 
-Pasting a URL can be supported as a secondary path, but the backend must verify that the video belongs to the authenticated channel before using private analytics.
+The upload selector should be a row list, not a decorative card grid. Each row should show a small thumbnail, title, publish date, duration, public view count when available, one status label, and one primary `Diagnose` action. Search and filters should be hidden behind a small control. Default sort is recent uploads.
+
+Pasting a URL can be supported as a hidden fallback, but the backend must verify that the video belongs to the authenticated channel before using private analytics.
 
 MVP does not automatically rank or detect underperforming videos across the channel. The upload list can show lightweight metadata such as title, thumbnail, publish date, duration, and public views, but private analytics should be fetched only after the user selects one video and only for the selected run and its baseline candidates.
 
 If the authenticated Google account has multiple YouTube channels or brand accounts, the app should support a one-active-channel picker. The schema must support multiple channels per user, but team and multi-channel workspace flows are not MVP.
 
-If the selected video is a Short, the MVP should show that Shorts diagnosis is not supported yet rather than forcing a long-form diagnostic model onto it.
+If the selected video is a Short, the MVP should show that Shorts diagnosis is not supported yet rather than forcing a long-form diagnostic model onto it. Suggested copy: `Candor diagnoses long-form videos first. Shorts behave differently enough that this report would be misleading.`
 
 ### Step 3: Analyze First
 
@@ -165,9 +223,27 @@ It fetches and stores an analysis snapshot:
 - traffic, watch, engagement, subscriber, and trend signals;
 - title, thumbnail, description, and packaging signals.
 
-The system may show an optional "what feels wrong?" selector, but it must not block analysis. Required questions should appear only when the evidence gate fails or a specific manual input would materially improve confidence.
+The system may show an optional "what felt wrong?" selector, but it must not block analysis. Suggested chips are `Low views`, `Weak retention`, `Good comments but low reach`, `Wrong audience`, and `Not sure`. Optional notes, manual CTR, impressions, and retention context should be hidden behind secondary controls.
 
-### Step 4: Evidence Gate
+Required questions should appear only when the evidence gate fails or a specific manual input would materially improve confidence.
+
+### Step 4: Wait For Required Data When Needed
+
+If selected-video metadata, ownership/channel verification, authenticated YouTube Analytics signals, or baseline candidate data is unavailable or partially missing, Candor should retry rather than produce a weak limited report.
+
+After bounded immediate retries, runs that are waiting on required data should enter `waiting_for_data`. This is not `failed` and not `needs_input`; no user action is required. The UI should say:
+
+```text
+Candor is waiting for YouTube Analytics data to settle. We will email you when the diagnosis is ready if you ask us to notify you.
+```
+
+`Notify me` is explicit and per-run only. Candor must not send automatic waiting-run email unless the user clicks `Notify me`. If email is missing, unverified, or not configured, show `Check again later` rather than pretending notification will happen.
+
+Transcript, comments, optional manual context, optional CTR, and optional impressions are non-blocking after bounded retries. They should be labeled unavailable or limited and can trigger targeted asks, but they should not keep a run waiting forever when core analytics and baseline data are available.
+
+If required data remains unavailable after retry exhaustion, the run becomes terminal `failed` with a precise, non-blaming explanation. It must not become a weak report.
+
+### Step 5: Evidence Gate
 
 The deterministic diagnosis engine decides whether evidence is sufficient to name a primary bottleneck.
 
@@ -186,13 +262,13 @@ If fewer than 5 comparable prior long-form videos are available, the app may sti
 - `3-4` comparable prior videos: ranked hypotheses only, low confidence, and explicit limitations.
 - `5+` comparable prior videos: the baseline gate can pass if the other gates pass.
 
-### Step 5: Generate Report
+### Step 6: Generate Report
 
 The report appears automatically when analysis completes. Chat unlocks after the report exists.
 
 If an analysis run fails, the user can retry analysis. Retry creates a new `analysis_run` linked to the failed run rather than mutating the old run. Refresh and manual-context revisions also create linked runs. This preserves immutable snapshots, reports, citations, feedback, and failure records while allowing safe artifact reuse.
 
-### Step 6: Ask Only If Needed
+### Step 7: Ask Only If Needed
 
 If data is insufficient, the product asks 1-3 targeted questions or requests specific manual metrics. It should explain what each missing answer would unlock.
 
@@ -361,16 +437,24 @@ Required sections:
 
 Default UI shape:
 
-- top diagnosis summary in 3-5 lines;
-- primary/secondary bottleneck or insufficient-evidence state;
-- funnel/status table;
-- confidence and evidence quality;
-- 3-5 strongest evidence cards;
+- video title and thumbnail;
+- primary answer if the evidence gate passes, or `No confident primary bottleneck yet`;
+- confidence label with a plain reason;
+- evidence quality strip;
+- one short `what this means` paragraph;
+- one primary next action;
+- compact baseline/metric evidence strip;
 - what to focus on;
 - what to ignore;
 - next-video plan;
 - hook/title/structure rewrites;
 - expandable baseline, retention, transcript, comment, metric, and limitation details.
+
+Detailed metrics should support the diagnosis rather than dominate the page. Full metric tables, baseline membership, retention point details, comment samples, and citation mapping belong behind `View evidence`.
+
+Charts should be sparse and takeaway-led. Use a retention-vs-baseline line chart when retention data is available and small baseline bars for a few key metrics. Every chart needs a plain-language takeaway beside it.
+
+Follow-up chat should be visually secondary as `Ask about this report`, not a full-screen chatbot. It can answer only from the stored analysis snapshot unless the user explicitly refreshes data, adds context, or invokes a deeper analyzer.
 
 Evidence cards should use the embedded YouTube player and timestamps rather than generated video clips for MVP. A typical card should include:
 
@@ -557,6 +641,8 @@ Used for:
 
 CTR and impressions are optional/manual context in MVP unless a verified platform path is added. Do not present ad or card impression metrics as normal thumbnail CTR/impressions.
 
+Required YouTube Analytics signals are blocking for diagnosis. If they are unavailable, delayed, or partially missing, Candor retries and may move the run to `waiting_for_data`. It should not generate a weak diagnosis without at least one authenticated analytics signal.
+
 ### Transcript Sources
 
 Layered transcript strategy:
@@ -587,6 +673,7 @@ Manual context is optional and structured-first, with free-form notes as a fallb
 
 MVP must include:
 
+- Candor multi-page SaaS shell with `/`, `/login`, `/auth`, `/app`, and `/faq`;
 - Google/YouTube OAuth login;
 - encrypted refresh-token storage;
 - disconnect and delete-analysis-data paths;
@@ -601,6 +688,10 @@ MVP must include:
 - Audience Signals Agent for comments;
 - linked retry for failed analysis runs;
 - linked refresh and manual-context revision runs;
+- `waiting_for_data` state for delayed required analytics or baseline evidence;
+- lightweight durable retry metadata for waiting runs;
+- explicit per-run `Notify me` consent;
+- transactional email provider interface with Resend and a fake test provider;
 - follow-up chat attached to the report;
 - lightweight report feedback tied to `analysis_run_id`;
 - provider-mocked tests.
@@ -610,8 +701,13 @@ MVP should avoid:
 - Instagram support;
 - multi-platform support;
 - competitor discovery;
+- clickbait title generation;
+- standalone title or thumbnail generators;
+- copying large creators' videos, formats, thumbnails, titles, or personal style;
 - automated thumbnail vision analysis;
 - full thumbnail generation;
+- user-facing performance scores, grades, or confidence percentages;
+- pricing or billing UI;
 - revenue analytics;
 - team workspaces;
 - generic chatbot-first UI;
@@ -627,9 +723,21 @@ Reliable and honest diagnosis is the product.
 - Validate strict report JSON, required sections, bottleneck consistency, insufficient-evidence state, and citations before display.
 - Retry report generation when validation fails.
 - If LLM report generation still fails, show a deterministic fallback report generated from diagnosis JSON.
-- Confidence is stored as a numeric `0.0-1.0` score but shown primarily as labels: `low`, `medium`, `medium_high`, `high`.
-- Do not show confidence percentages until confidence is calibrated with validation data.
+- Confidence is stored as a numeric `0.0-1.0` score but shown as labels with reasons: `High confidence`, `Medium confidence`, `Low confidence`, or `Insufficient evidence`.
+- Do not show confidence percentages.
 - Hook/title rewrites are allowed when evidence is insufficient, but they must be labeled as low-confidence options tied to ranked hypotheses.
+
+## 15.4 Transactional Email
+
+Email is operational, not marketing. MVP email is limited to:
+
+- diagnosis ready after a `waiting_for_data` run, only if the user clicked `Notify me`;
+- analysis failed after retries are exhausted, only if the user clicked `Notify me`;
+- optional deletion confirmation.
+
+Do not send newsletters, weekly reports, growth nudges, reactivation emails, or marketing messages.
+
+Notification consent is per run. Store the requested email address, requested timestamp, and send attempts against the relevant `analysis_run`. Do not create account-wide notification preferences in MVP.
 
 ## 15.2 Report Feedback
 
@@ -698,5 +806,5 @@ What should they test next?
 ## 19. One-Line Definition
 
 ```text
-An AI post-mortem tool for YouTube creators that turns underperforming videos into clear diagnoses and better next-video plans.
+Candor is a frank, evidence-backed YouTube diagnosis tool that helps creators understand why one video underperformed and what to try next.
 ```

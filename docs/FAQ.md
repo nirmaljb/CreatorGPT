@@ -1,202 +1,268 @@
-# FAQ
+# Candor FAQ
 
-This FAQ answers the questions most likely to come up in a demo or review. The answers use simple language, but they still reflect the current architecture and tradeoffs.
+This FAQ answers the questions most likely to come up while building or reviewing Candor, the OAuth-connected YouTube video diagnosis product.
 
 ## Questions
 
-1. [Can you walk me through the full system architecture from URL input to streamed cited answer?](#1-can-you-walk-me-through-the-full-system-architecture-from-url-input-to-streamed-cited-answer)
-2. [Why did you choose FastAPI, Next.js, LangGraph, Postgres, Qdrant, Groq, and FastEmbed?](#2-why-did-you-choose-fastapi-nextjs-langgraph-postgres-qdrant-groq-and-fastembed)
-3. [Why do you use both Postgres and Qdrant instead of storing everything in one database?](#3-why-do-you-use-both-postgres-and-qdrant-instead-of-storing-everything-in-one-database)
-4. [What exactly is the source of truth for video metadata, transcript chunks, chat history, and citations?](#4-what-exactly-is-the-source-of-truth-for-video-metadata-transcript-chunks-chat-history-and-citations)
-5. [How does the ingestion pipeline work step by step?](#5-how-does-the-ingestion-pipeline-work-step-by-step)
-6. [Why does ingestion run asynchronously, and what would break if it ran inside the request?](#6-why-does-ingestion-run-asynchronously-and-what-would-break-if-it-ran-inside-the-request)
-7. [How would queues scale the ingestion pipeline in production?](#7-how-would-queues-scale-the-ingestion-pipeline-in-production)
-8. [Why should ingestion be queued but chat stay synchronous with SSE streaming?](#8-why-should-ingestion-be-queued-but-chat-stay-synchronous-with-sse-streaming)
-9. [How does YouTube ingestion work, and why do you try captions before Whisper?](#9-how-does-youtube-ingestion-work-and-why-do-you-try-captions-before-whisper)
-10. [How does Instagram ingestion work, and how do you handle missing or unavailable metadata?](#10-how-does-instagram-ingestion-work-and-how-do-you-handle-missing-or-unavailable-metadata)
-11. [How do you compute engagement rate, and what happens when views, likes, or comments are unavailable?](#11-how-do-you-compute-engagement-rate-and-what-happens-when-views-likes-or-comments-are-unavailable)
-12. [What is your chunking strategy, and why are first-5-second hook chunks treated specially?](#12-what-is-your-chunking-strategy-and-why-are-first-5-second-hook-chunks-treated-specially)
-13. [Why did you use FastEmbed with `BAAI/bge-small-en-v1.5`, and what would changing embedding models require?](#13-why-did-you-use-fastembed-with-baaibge-small-en-v15-and-what-would-changing-embedding-models-require)
-14. [How does Qdrant retrieval work, and why do comparison questions retrieve separately from Video A and Video B?](#14-how-does-qdrant-retrieval-work-and-why-do-comparison-questions-retrieve-separately-from-video-a-and-video-b)
-15. [Why did you build deterministic LangGraph routing instead of using an LLM router?](#15-why-did-you-build-deterministic-langgraph-routing-instead-of-using-an-llm-router)
-16. [Why do numeric and creator questions bypass Qdrant and use typed Postgres metadata tools?](#16-why-do-numeric-and-creator-questions-bypass-qdrant-and-use-typed-postgres-metadata-tools)
-17. [How do you prevent hallucinated metrics or fabricated citations?](#17-how-do-you-prevent-hallucinated-metrics-or-fabricated-citations)
-18. [How does memory work across chat turns, and how do you prevent unbounded context growth?](#18-how-does-memory-work-across-chat-turns-and-how-do-you-prevent-unbounded-context-growth)
-19. [What are the main cost drivers at 1000 creators per day, and how does your system reduce cost?](#19-what-are-the-main-cost-drivers-at-1000-creators-per-day-and-how-does-your-system-reduce-cost)
-20. [What would you change first to make this production-ready for 10,000 users?](#20-what-would-you-change-first-to-make-this-production-ready-for-10000-users)
+1. [What is Candor?](#1-what-is-candor)
+2. [What question does Candor answer?](#2-what-question-does-candor-answer)
+3. [Why does Candor need Google/YouTube OAuth?](#3-why-does-candor-need-googleyoutube-oauth)
+4. [What data does Candor read?](#4-what-data-does-candor-read)
+5. [What will Candor never do in MVP?](#5-what-will-candor-never-do-in-mvp)
+6. [Why does Candor compare against the creator's own channel?](#6-why-does-candor-compare-against-the-creators-own-channel)
+7. [Why does Candor avoid clickbait titles and thumbnail generation?](#7-why-does-candor-avoid-clickbait-titles-and-thumbnail-generation)
+8. [What are the main pages in the app?](#8-what-are-the-main-pages-in-the-app)
+9. [What happens after OAuth succeeds?](#9-what-happens-after-oauth-succeeds)
+10. [Why is the app not a dashboard?](#10-why-is-the-app-not-a-dashboard)
+11. [How does Candor choose videos for diagnosis?](#11-how-does-candor-choose-videos-for-diagnosis)
+12. [Why are Shorts excluded in MVP?](#12-why-are-shorts-excluded-in-mvp)
+13. [How does Candor handle too-new videos?](#13-how-does-candor-handle-too-new-videos)
+14. [What is `waiting_for_data`?](#14-what-is-waiting_for_data)
+15. [When does Candor send email?](#15-when-does-candor-send-email)
+16. [What happens if required data never arrives?](#16-what-happens-if-required-data-never-arrives)
+17. [What happens when transcript or comments are unavailable?](#17-what-happens-when-transcript-or-comments-are-unavailable)
+18. [How does Candor decide whether evidence is sufficient?](#18-how-does-candor-decide-whether-evidence-is-sufficient)
+19. [What does an insufficient-evidence report show?](#19-what-does-an-insufficient-evidence-report-show)
+20. [How does Candor prevent made-up diagnoses?](#20-how-does-candor-prevent-made-up-diagnoses)
+21. [What does follow-up chat do?](#21-what-does-follow-up-chat-do)
+22. [How can a creator disconnect or delete data?](#22-how-can-a-creator-disconnect-or-delete-data)
+23. [What visual direction should the frontend follow?](#23-what-visual-direction-should-the-frontend-follow)
+24. [What is out of scope for MVP?](#24-what-is-out-of-scope-for-mvp)
 
-## 1. Can you walk me through the full system architecture from URL input to streamed cited answer?
+## 1. What is Candor?
 
-The user enters two video URLs in the Next.js frontend. The frontend sends them to `POST /ingest`.
+Candor is an OAuth-connected YouTube video performance diagnosis tool for serious creators. It analyzes one owned long-form video, compares it against the creator's own channel baseline, and produces an evidence-backed diagnosis report.
 
-The FastAPI backend validates the URLs, checks simple backpressure limits, creates a session in Postgres, and returns a `session_id` right away. The heavier ingestion work continues in the background.
+The product is report-first. Chat is secondary and stays attached to a generated report.
 
-During ingestion, the backend extracts metadata, gets transcripts, chunks the transcript text, creates embeddings with FastEmbed, and stores those vectors in Qdrant. Durable state, such as session status, metadata, chat history, extraction cache, and usage data, stays in Postgres.
+## 2. What question does Candor answer?
 
-When the user asks a question, `POST /chat` routes the question through LangGraph. Numeric questions use Postgres metadata tools. Transcript questions use Qdrant. Mixed comparison questions use both. The backend streams the final Groq answer back to the frontend with SSE events and exact citations like `[Video A metadata]` or `[Video B, chunk 2, 00:11-00:24]`.
-
-## 2. Why did you choose FastAPI, Next.js, LangGraph, Postgres, Qdrant, Groq, and FastEmbed?
-
-FastAPI is a good fit because the extraction, transcription, embedding, and RAG code is Python-heavy. It works well with `yt-dlp`, Groq transcription, LangGraph, Qdrant, and background ingestion.
-
-Next.js is used for the frontend because it is part of the assignment stack and is fast to ship with React and TypeScript.
-
-LangGraph gives the chat path an explicit flow. The app can route questions to metadata tools, transcript retrieval, hook retrieval, or mixed comparison logic instead of treating every question the same way.
-
-Postgres stores durable app state. Qdrant stores searchable transcript vectors. Groq provides fast hosted chat and Whisper transcription. FastEmbed with `BAAI/bge-small-en-v1.5` gives local, low-cost embeddings that match the short transcript chunk use case.
-
-## 3. Why do you use both Postgres and Qdrant instead of storing everything in one database?
-
-Postgres and Qdrant solve different problems.
-
-Postgres is the source of truth for structured data: sessions, video metadata, raw extractor metadata, chat messages, extraction cache, and usage ledger rows. It is good at exact lookups, durable records, constraints, and reporting.
-
-Qdrant is built for vector search. It finds transcript chunks that are semantically similar to a user question. That is a different access pattern than asking Postgres for a known session row or exact metric.
-
-Using both keeps numeric facts reliable and transcript search fast.
-
-## 4. What exactly is the source of truth for video metadata, transcript chunks, chat history, and citations?
-
-Postgres is the source of truth for video metadata, raw extractor metadata, session status, chat history, extraction cache, and usage ledger rows.
-
-Qdrant stores embedded transcript chunks for retrieval. Each chunk includes payload fields such as `session_id`, `video_id`, `chunk_index`, timestamps, `is_hook`, and the citation source tag.
-
-Citations come from stored data, not from the model inventing labels. Metadata citations use `[Video A metadata]` or `[Video B metadata]`. Transcript citations use the chunk payload, such as `[Video A, chunk 3, 00:12-00:27]`.
-
-## 5. How does the ingestion pipeline work step by step?
-
-The backend first validates the requested platform and URL for each slot.
-
-Then it checks process-local limits such as concurrent ingestions and per-IP hourly sessions. If the request is allowed, it creates a Postgres session and returns the `session_id`.
-
-In the background, ingestion loads metadata from cache or extracts fresh metadata. It stores metadata for both videos first so the status endpoint becomes useful early.
-
-After metadata is stored, each video runs transcript and vector work. YouTube tries captions first. If captions are not available, it uses audio download and Groq Whisper. Instagram uses audio download and Groq Whisper.
-
-The transcript is normalized into timed words, chunked, embedded, and written to Qdrant. The session finishes as `completed` when both videos are processed, or `failed` if a required provider step fails.
-
-## 6. Why does ingestion run asynchronously, and what would break if it ran inside the request?
-
-Ingestion can take a while. Metadata scraping, audio download, transcription, chunking, embedding, and vector upsert are all slower than a normal web request.
-
-If all of that ran inside `POST /ingest`, the browser would wait for a long time, hosted platforms could time out the request, and users would not see progress. A slow or failed provider call could also tie up API workers.
-
-Returning a `session_id` immediately makes the app responsive. The frontend can poll `GET /status/{session_id}` and show progress while the backend keeps working.
-
-## 7. How would queues scale the ingestion pipeline in production?
-
-The current app uses FastAPI background tasks because that is enough for a demo. In production, ingestion should move to a durable queue.
-
-A queue would let the API accept work quickly, store a job, and let separate worker processes run extraction and transcription. Workers could scale independently from the API. Failed jobs could retry with backoff. Long jobs would survive API restarts. A queue would also make it easier to enforce global concurrency limits across many backend instances.
-
-Good production choices would include a managed queue, a worker system, shared rate limiting, and clear job states stored in Postgres.
-
-## 8. Why should ingestion be queued but chat stay synchronous with SSE streaming?
-
-Ingestion is long-running batch work. It has many external steps and does not need to hold an open browser response. That makes it a natural fit for a queue.
-
-Chat is interactive. The user expects to see the answer as it is generated. SSE streaming keeps the request open and sends tokens, sources, route data, and completion events in real time.
-
-So the best split is: queue ingestion because it is slow background work, and keep chat synchronous because it is a live user interaction.
-
-## 9. How does YouTube ingestion work, and why do you try captions before Whisper?
-
-YouTube ingestion first extracts metadata. It then tries `youtube-transcript-api` for captions.
-
-Captions are the cheapest and fastest path. They avoid audio download, avoid Whisper cost, and can work for long YouTube videos without being capped by `MAX_VIDEO_SECONDS`.
-
-If captions are missing or fail, the backend falls back to `yt-dlp` audio extraction and Groq `whisper-large-v3`. The audio fallback is limited by `MAX_VIDEO_SECONDS` so one long video does not consume too much transcription time.
-
-Some YouTube videos may require `YTDLP_COOKIES_PATH` when YouTube returns sign-in or bot-check challenges. The app reports that as a visible error instead of creating fake data.
-
-## 10. How does Instagram ingestion work, and how do you handle missing or unavailable metadata?
-
-Instagram ingestion uses the Instagram extractor path. It gets metadata through `yt-dlp` when available, downloads temporary audio, and uses Groq Whisper for transcription.
-
-Instagram does not always expose every metric. Views, followers, or other fields may be unavailable depending on the Reel, account, cookies, or platform behavior.
-
-The app keeps unknown strings as `unknown`. Some stored integer columns may default to `0` for compatibility, but availability flags decide what the UI and chat show. If a metric was not actually available from the extractor, the answer should say `unavailable`, not pretend the value is zero.
-
-## 11. How do you compute engagement rate, and what happens when views, likes, or comments are unavailable?
-
-The engagement rate is based on available engagement counts divided by views. In simple terms, it is:
+Candor answers:
 
 ```text
-(likes + comments) / views
+Why did this video underperform?
 ```
 
-The app only treats that as complete when the needed values are available. Views are especially important because they are the denominator.
+The answer should be direct, useful, and honest about evidence limits. Candor should feel like an experienced creator friend with receipts, not a gimmicky AI coach or a "brutally honest" roast.
 
-If views are unavailable for a video, the system marks the engagement comparison as incomplete. It should not declare a winner from a missing denominator. If likes or comments are unavailable, the answer should explain that the metric is incomplete instead of inventing a number.
+## 3. Why does Candor need Google/YouTube OAuth?
 
-## 12. What is your chunking strategy, and why are first-5-second hook chunks treated specially?
+Reliable diagnosis needs private creator analytics and ownership verification. Public metadata alone cannot reliably show retention, traffic, watch, engagement, subscriber, or same-window baseline signals.
 
-Transcripts are normalized into timed words and then grouped into chunks with timestamps. Each chunk gets a source tag and is embedded into Qdrant.
+OAuth also lets Candor verify that the selected video belongs to the connected creator before using private analytics.
 
-The first few seconds of a short-form video are especially important because that is where the hook usually happens. The app marks early chunks with `is_hook=true`, and hook comparison questions retrieve those chunks with a Qdrant payload filter.
+## 4. What data does Candor read?
 
-That prevents a "compare the first 5 seconds" question from retrieving a random later moment just because it is semantically similar.
+MVP uses narrow read-only scopes:
 
-## 13. Why did you use FastEmbed with `BAAI/bge-small-en-v1.5`, and what would changing embedding models require?
+- Google identity: `openid`, `email`, and `profile`.
+- YouTube read-only channel and video metadata.
+- YouTube Analytics read-only performance metrics.
 
-`BAAI/bge-small-en-v1.5` is small, local, fast, and good enough for short transcript chunks. It avoids paying a hosted embedding provider for every chunk during testing.
+Candor stores only enough data to reproduce reports: selected video metadata, normalized analytics used in the report, baseline membership and metrics, retention points, transcript evidence, comment signals used as evidence, manual creator context, deterministic diagnosis JSON, report output, citations, and follow-up messages.
 
-The model produces 384-dimensional vectors. The Qdrant collection is configured for that dimension.
+Candor does not continuously sync the whole channel in MVP.
 
-Changing embedding models would require updating the embedding provider wrapper, changing `EMBEDDING_DIMENSIONS`, recreating or migrating the Qdrant collection, and re-embedding stored transcript chunks. For example, OpenAI `text-embedding-3-small` uses 1536 dimensions, so it cannot be mixed into the existing 384-dimensional collection.
+## 5. What will Candor never do in MVP?
 
-## 14. How does Qdrant retrieval work, and why do comparison questions retrieve separately from Video A and Video B?
+Candor will not:
 
-Each transcript chunk is embedded and stored in Qdrant with payload fields for session, video, timestamps, and hook status.
+- upload, edit, or delete videos;
+- manage captions;
+- request write/manage scopes;
+- request revenue or monetary analytics scopes;
+- expose OAuth tokens to the frontend;
+- log OAuth credentials;
+- continuously warehouse the creator's whole channel;
+- claim knowledge of YouTube's internal recommendation model.
 
-For a single-video question, the system filters retrieval to that video. For hook questions, it filters to `is_hook=true`. For comparison questions, it retrieves from Video A and Video B separately, then merges the evidence.
+## 6. Why does Candor compare against the creator's own channel?
 
-This matters because one global search can return mostly one video. Balanced retrieval makes sure both videos are represented in comparison answers.
+Candor is designed to understand the creator's own videos, audience, style, and baseline. Big creators often have different audiences, budgets, formats, publishing history, and distribution context. Using them as the default benchmark can push creators toward imitation instead of useful learning.
 
-## 15. Why did you build deterministic LangGraph routing instead of using an LLM router?
+Reference videos may become future study material, but they should not replace the creator's own baseline.
 
-The router is rules-first because the assignment questions need predictable behavior. A deterministic router is cheaper, easier to test, easier to debug, and easier to explain.
+## 7. Why does Candor avoid clickbait titles and thumbnail generation?
 
-The current routes are `METADATA_ONLY`, `TRANSCRIPT_ONLY`, `HOOK_COMPARISON`, `MIXED_COMPARISON`, `IMPROVEMENT_SUGGESTION`, and `FOLLOW_UP`.
+Candor is a diagnosis product, not a gimmick generator. It can suggest title directions or packaging follow-through when evidence supports that work, but it should not have a standalone title generator, thumbnail generator, viral ideas page, or copy-this-creator feature.
 
-An LLM classifier could be added later if evals show that rules miss important phrasing. For now, deterministic routing gives better demo safety.
+The product should help the creator understand what happened to their video, not push them to imitate someone else.
 
-## 16. Why do numeric and creator questions bypass Qdrant and use typed Postgres metadata tools?
+## 8. What are the main pages in the app?
 
-Qdrant is good for finding relevant transcript text. It is not the right source for exact numbers like views, likes, comments, follower count, duration, or engagement rate.
+Candor separates public, auth, and app responsibilities:
 
-Numeric and creator questions use typed Postgres tools such as `get_video_metrics`, `get_creator_info`, and `get_engagement_comparison`. These tools read structured metadata from Postgres and return known fields.
+- `/` is the landing page with one promise, one report preview, and one `Connect YouTube` CTA.
+- `/login` is the focused sign-in page.
+- `/auth` is the focused Google/YouTube trust and permission detail page.
+- `/app` is the authenticated workspace for video selection, analysis progress, reports, history, and settings.
+- `/faq` is the supporting trust and education page.
 
-That reduces hallucination risk and avoids asking a language model to infer numbers from transcript text.
+Unauthenticated users who visit `/app` should go to `/login`. Connected users who visit `/auth` should continue to `/app`.
 
-## 17. How do you prevent hallucinated metrics or fabricated citations?
+## 9. What happens after OAuth succeeds?
 
-The app separates exact facts from semantic transcript evidence.
+OAuth success routes to `/app`, not back to the landing page.
 
-Numeric facts come from Postgres metadata tools. Transcript claims come from Qdrant chunks. The prompt tells the model to cite exact source tags only. The eval suite checks citation shape, metadata citations, transcript citations, unavailable metrics, and route behavior.
+If one channel is available, the creator goes to video selection. If multiple channels are available, the app shows a compact active-channel picker first. If required scopes are missing, the user returns to `/auth` with a clear missing-access state.
 
-The app also does not silently fall back to fake metadata or fake transcripts. If extraction, transcription, retrieval, or provider calls fail, the user should see a structured error instead of a fabricated answer.
+## 10. Why is the app not a dashboard?
 
-## 18. How does memory work across chat turns, and how do you prevent unbounded context growth?
+The product answers one question. A dashboard invites wandering before the creator gets value.
 
-Chat messages are stored in Postgres. When the user asks a new question, the backend loads recent chat history and uses it as context.
+The authenticated app should open as a focused workflow:
 
-The number of messages loaded is capped by `MAX_CHAT_HISTORY_MESSAGES`. That keeps prompts from growing without limit and helps control latency and token cost.
+1. Choose one owned long-form video.
+2. Optionally add lightweight context.
+3. Start diagnosis.
+4. View report.
 
-Follow-up handling is intentionally simple. The system resolves obvious references like "that video", "their", or "what about B" from recent chat history, then routes the resolved question again.
+Secondary controls such as switch channel, settings, report history, raw evidence, export, and FAQ should be available but hidden behind menus or buttons.
 
-## 19. What are the main cost drivers at 1000 creators per day, and how does your system reduce cost?
+## 11. How does Candor choose videos for diagnosis?
 
-The main cost drivers are transcription seconds, chat tokens, embedding work, Qdrant storage/search, Postgres storage, and repeated extraction work.
+The user selects one owned upload manually. Candor should not precompute private analytics for every upload or auto-rank underperformers in MVP.
 
-The app reduces cost in several ways. YouTube captions are used before Whisper, so many YouTube videos avoid transcription cost. Extraction results are cached in Postgres for repeated demos. Transcript chunks are capped before embedding. Retrieved chunks and chat history are capped before prompting. Numeric questions bypass Qdrant retrieval and use Postgres metadata tools.
+The upload UI should be a row list, not a card grid. Each row should show thumbnail, title, publish date, duration, public view count when available, one status label, and one `Diagnose` action.
 
-The usage ledger records signals like transcribed seconds, chunk count, embedding count, chat tokens, model names, cache hits, and cache misses. That gives a starting point for cost analysis before scaling.
+A hidden URL-paste fallback can exist, but the backend must verify ownership before diagnosis.
 
-## 20. What would you change first to make this production-ready for 10,000 users?
+## 12. Why are Shorts excluded in MVP?
 
-The first change would be moving ingestion to a durable queue with separate workers. That would make long jobs reliable, retryable, and scalable outside the API process.
+Shorts behave differently enough that applying a long-form diagnostic model would be misleading. Candor should filter or disable Shorts and explain:
 
-The next changes would be shared rate limiting, user accounts and authorization, Alembic migrations, provider health monitoring, alerting, better retry controls, and stronger operational dashboards.
+```text
+Candor diagnoses long-form videos first. Shorts behave differently enough that this report would be misleading.
+```
 
-After that, I would add nightly real-provider evals, richer citation inspection in the UI, and retrieval improvements such as reranking or hybrid search only if eval results show a real quality gap.
+## 13. How does Candor handle too-new videos?
+
+Candor uses clear age states:
+
+- Under 72 hours: too new for a primary diagnosis.
+- 72 hours to 7 completed days: early read with lower confidence.
+- 7+ completed days: normal first-7-completed-days diagnosis window.
+
+If required YouTube Analytics data is delayed or incomplete, the state is `waiting_for_data`, not `early_read`.
+
+## 14. What is `waiting_for_data`?
+
+`waiting_for_data` is a first-class run state for delayed required data. It is not a failure and not a request for user input.
+
+Use it when required selected-video metadata, ownership/channel verification, authenticated YouTube Analytics, or baseline candidate data is unavailable or partially missing after bounded immediate retries.
+
+Waiting runs store retry metadata such as `next_retry_at`, `retry_count`, and `last_data_wait_reason`. A lightweight scheduled backend check retries waiting runs and resumes analysis when required data is available.
+
+## 15. When does Candor send email?
+
+Candor sends transactional email only after explicit per-run consent.
+
+In a `waiting_for_data` state, the UI can show `Notify me` if the user has a verified email and email is configured. After the user clicks it, Candor may email that verified Google email when the diagnosis is ready or when retry exhaustion fails the run.
+
+Candor does not send automatic waiting-run email, newsletters, weekly reports, growth nudges, or reactivation emails.
+
+The MVP email provider is Resend behind an email provider interface, with a fake provider for tests and local development.
+
+## 16. What happens if required data never arrives?
+
+After retry exhaustion, the run becomes terminal `failed` with a precise non-blaming reason:
+
+```text
+YouTube Analytics data was not available after several checks, so Candor could not produce a reliable diagnosis.
+```
+
+Candor preserves partial evidence internally for inspection, but it should not turn that partial evidence into a weak user report.
+
+## 17. What happens when transcript or comments are unavailable?
+
+Transcript and comments are supporting evidence, not always blocking evidence.
+
+Candor retries transcript acquisition with a YouTube captions fast path and Groq Whisper fallback. If transcript still fails, the report can continue when core analytics and baseline data are available, but content-structure confidence is limited and the report can ask for a script or transcript.
+
+Disabled, unavailable, sparse, or generic comments are neutral, not negative.
+
+## 18. How does Candor decide whether evidence is sufficient?
+
+A primary bottleneck can be named only when the run has:
+
+- at least one authenticated analytics signal;
+- at least 5 comparable prior long-form videos in the same-window channel baseline;
+- at least one content or audience signal;
+- one candidate bottleneck materially stronger than alternatives;
+- at least one contradiction check;
+- confidence tied to data completeness.
+
+If that bar is not met, Candor should not name a confident primary bottleneck.
+
+## 19. What does an insufficient-evidence report show?
+
+Insufficient evidence is a first-class report state, not a failure.
+
+It should show:
+
+- no confident primary bottleneck;
+- ranked hypotheses with low-confidence labels;
+- missing evidence and why it matters;
+- 1-3 targeted asks;
+- a primary action such as `Add missing context`.
+
+Thin channel history uses learning mode. With `0-2` comparable prior videos, there is no primary diagnosis. With `3-4`, Candor shows low-confidence ranked hypotheses.
+
+## 20. How does Candor prevent made-up diagnoses?
+
+Deterministic analyzers own metrics, baseline selection, retention mapping, candidate scoring, contradiction checks, evidence gates, and confidence. The LLM owns explanation and coaching only inside the deterministic evidence envelope.
+
+Reports must use strict JSON and machine-readable citations to stored evidence. Invalid report JSON or invalid citations should be rejected before display. If LLM generation fails validation, Candor should use a deterministic fallback report.
+
+## 21. What does follow-up chat do?
+
+Follow-up chat is secondary and attached to the report. It answers questions about the stored analysis snapshot and cites report evidence.
+
+It should not become a full-screen chatbot or a broad viral-title generator. Requests such as "give me 20 viral titles" should be refused or redirected unless grounded in the report and framed as learning from the creator's own evidence.
+
+## 22. How can a creator disconnect or delete data?
+
+Settings should include trust and account controls:
+
+- connected Google identity;
+- connected YouTube channel;
+- granted access summary;
+- disconnect YouTube;
+- delete analysis data;
+- FAQ/privacy links.
+
+Disconnect removes or revokes future OAuth access where possible. Delete-analysis-data removes analysis runs, snapshots, reports, comments, manual evidence, follow-ups, and vectors. It should not automatically delete the user account unless a separate account-delete flow exists.
+
+## 23. What visual direction should the frontend follow?
+
+Candor should feel like a calm diagnostic workspace.
+
+Design rules:
+
+- red is only for errors;
+- teal is a scarce truth accent;
+- evidence blue is `#4B6B8C`;
+- amber is for uncertainty, limitations, and missing data;
+- use Inter for product UI and prose;
+- use tabular numerals for all metrics;
+- use mono only for timestamps, evidence IDs, raw metric labels, and compact diagnostic metadata.
+
+Avoid purple AI gradients, neon growth-hacker colors, aggressive black/red styling, soft influencer pastels, decorative dashboard collages, and user-facing scores or grades.
+
+## 24. What is out of scope for MVP?
+
+Out of scope:
+
+- public URL diagnosis without OAuth;
+- diagnosing non-owned videos;
+- Shorts diagnosis;
+- automated thumbnail image analysis;
+- standalone title or thumbnail generation;
+- copying larger creators' style or format;
+- pricing and billing UI;
+- teams, agencies, and shared workspaces;
+- marketing email;
+- durable full queue infrastructure;
+- continuous whole-channel sync;
+- write/manage YouTube scopes;
+- revenue analytics.

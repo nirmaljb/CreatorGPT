@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 
 import { backendApiBase } from "../../../../lib/apiBase";
 
+const ALLOWED_FALLBACK_PATHS = new Set(["/auth", "/login"]);
+
 async function backendFailureReason(response: Response) {
   try {
     const body = (await response.json()) as { detail?: unknown };
@@ -11,8 +13,14 @@ async function backendFailureReason(response: Response) {
   }
 }
 
+function fallbackPathFromRequest(request: Request) {
+  const url = new URL(request.url);
+  const returnTo = url.searchParams.get("returnTo") || "/auth";
+  return ALLOWED_FALLBACK_PATHS.has(returnTo) ? returnTo : "/auth";
+}
+
 export async function GET(request: Request) {
-  const fallbackUrl = new URL("/", request.url);
+  const fallbackUrl = new URL(fallbackPathFromRequest(request), request.url);
   fallbackUrl.searchParams.set("auth", "unavailable");
 
   try {
@@ -28,7 +36,7 @@ export async function GET(request: Request) {
     const reason = await backendFailureReason(response);
     if (reason) fallbackUrl.searchParams.set("reason", reason);
   } catch {
-    // The home page will also show the unavailable connection status from /api/me.
+    // The initiating page owns safe consent-start failure messaging.
     fallbackUrl.searchParams.set("reason", "OAuth service is unreachable.");
   }
 

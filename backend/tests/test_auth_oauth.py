@@ -155,7 +155,7 @@ def test_oauth_callback_creates_user_encrypted_token_and_server_session(
     callback_response = client.get(f"/auth/google/callback?code=auth-code&state={state}", follow_redirects=False)
 
     assert callback_response.status_code == 303
-    assert callback_response.headers["location"] == "http://localhost:3000?auth=connected&connection=connected"
+    assert callback_response.headers["location"] == "http://localhost:3000/app?auth=connected&connection=connected"
     assert auth_settings.auth_session_cookie_name in callback_response.headers["set-cookie"]
     assert auth_settings.auth_csrf_cookie_name in callback_response.headers["set-cookie"]
 

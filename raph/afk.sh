@@ -9,7 +9,7 @@ fi
 for ((i=1; i<=$1; i++)); do
   commits=$(git log -n 5 --format="%H%n%ad%n%B---" --date=short 2>/dev/null || echo "No commits found")
   issues=$(cat issues/*.md 2>/dev/null || echo "No issues found")
-  prompt=$(cat ralph/prompt.md)
+  prompt=$(cat raph/prompt.md)
 
   result=$(codex exec --dangerously-bypass-approvals-and-sandbox \
     "Previous commits: $commits Issues: $issues $prompt")

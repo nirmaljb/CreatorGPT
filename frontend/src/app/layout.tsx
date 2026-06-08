@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "YouTube Diagnosis Concierge",
-  description: "Connect YouTube for creator-owned video performance diagnosis."
+  title: "Candor",
+  description: "Evidence-backed YouTube video diagnosis for serious creators."
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
